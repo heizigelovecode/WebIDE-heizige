@@ -36,6 +36,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.web.webide.ui.ThemeViewModel
 import com.web.webide.ui.ThemeViewModelFactory
@@ -59,6 +62,19 @@ fun CodeEditorView(
     viewModel: EditorViewModel
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // 重新加载配置，确保读取到设置页面的更改
+                viewModel.reloadEditorConfig(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
     var isEditorReady by remember { mutableStateOf(false) }
 
     val editorConfig = viewModel.editorConfig
@@ -114,6 +130,7 @@ fun CodeEditorView(
         }
     }
 
+
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -133,6 +150,9 @@ fun CodeEditorView(
                     // 其他配置
                     view.isWordwrap = editorConfig.wordWrap
                     view.tabWidth = editorConfig.tabWidth
+
+                    //代码折叠
+                    view.setFoldingEnabled(editorConfig.codeFolding)
 
                     if (editorConfig.showInvisibles) {
                         view.nonPrintablePaintingFlags =
