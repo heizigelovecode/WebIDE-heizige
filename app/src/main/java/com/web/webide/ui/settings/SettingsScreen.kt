@@ -92,17 +92,19 @@ fun SettingsScreen(
     var tabWidth by remember { mutableIntStateOf(prefs.getInt("editor_tab_width", 4)) }
     var wordWrap by remember { mutableStateOf(prefs.getBoolean("editor_word_wrap", false)) }
     var showInvisibles by remember { mutableStateOf(prefs.getBoolean("editor_show_invisibles", false)) }
+    var codeFolding by remember { mutableStateOf(prefs.getBoolean("editor_code_folding", true)) }
     var showToolbar by remember { mutableStateOf(prefs.getBoolean("editor_show_toolbar", true)) }
     var fontPath by remember { mutableStateOf(prefs.getString("editor_font_path", "") ?: "") }
     var customSymbols by remember { mutableStateOf(prefs.getString("editor_custom_symbols", "Tab,<,>,/,=,\",',!,?,;,:,{,},[,],(,),+,-,*,_,&,|") ?: "") }
 
     // 自动保存
-    LaunchedEffect(tabWidth, wordWrap, showInvisibles, showToolbar, fontPath, customSymbols) {
+    LaunchedEffect(tabWidth, wordWrap, showInvisibles, codeFolding, showToolbar, fontPath, customSymbols) {
         prefs.edit {
             putFloat("editor_font_size", fontSize)
             putInt("editor_tab_width", tabWidth)
             putBoolean("editor_word_wrap", wordWrap)
             putBoolean("editor_show_invisibles", showInvisibles)
+            putBoolean("editor_code_folding", codeFolding)
             putBoolean("editor_show_toolbar", showToolbar)
             putString("editor_font_path", fontPath)
             putString("editor_custom_symbols", customSymbols)
@@ -152,6 +154,8 @@ fun SettingsScreen(
                     onWordWrapChange = { wordWrap = it },
                     showInvisibles = showInvisibles,
                     onShowInvisiblesChange = { showInvisibles = it },
+                    codeFolding = codeFolding,
+                    onCodeFoldingChange = { codeFolding = it },
                     showToolbar = showToolbar,
                     onShowToolbarChange = { showToolbar = it },
                     fontPath = fontPath,
@@ -248,6 +252,8 @@ fun EditorSettingsItem(
     onWordWrapChange: (Boolean) -> Unit,
     showInvisibles: Boolean,
     onShowInvisiblesChange: (Boolean) -> Unit,
+    codeFolding: Boolean,
+    onCodeFoldingChange: (Boolean) -> Unit,
     showToolbar: Boolean,
     onShowToolbarChange: (Boolean) -> Unit,
     fontPath: String,
@@ -426,6 +432,7 @@ fun EditorSettingsItem(
                     CompactSwitchRow("显示工具栏", showToolbar, onShowToolbarChange)
                     CompactSwitchRow("自动换行", wordWrap, onWordWrapChange)
                     CompactSwitchRow("显示空白符", showInvisibles, onShowInvisiblesChange)
+                    CompactSwitchRow("代码折叠", codeFolding, onCodeFoldingChange)
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), thickness = 0.5.dp)
 
