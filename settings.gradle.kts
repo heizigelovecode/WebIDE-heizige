@@ -46,9 +46,8 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url = uri("https://jitpack.io") }
-
     }
 }
 
 rootProject.name = "WebIDE"
-include(":app",":signer",":webapp",":web-bridge")
+include(":app",":signer",":webapp",":web-bridge",":editor",":editor-lsp",":language-treesitter")
