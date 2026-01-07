@@ -20,28 +20,17 @@
 package com.web.webide.ui.editor
 
 import android.content.Context
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
@@ -52,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,14 +54,12 @@ import com.web.webide.ui.editor.viewmodel.EditorViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.web.webide.build.ApkInstaller
+import com.web.webide.ui.editor.components.EditorPanelLayout
 import com.web.webide.ui.editor.components.EditorToolbar
 import com.web.webide.ui.editor.components.JumpLinePanel
 import com.web.webide.ui.editor.components.SearchPanel
@@ -170,7 +156,10 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
 
     DismissibleNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = false,
+        // 关键点：只有当抽屉已经打开时，才允许手势操作。
+        // 这样关闭时，编辑器可以自由横向滚动，不会误触出抽屉；
+        // 打开时，又可以向左滑动关闭。
+        gesturesEnabled = drawerState.isOpen,
         drawerContent = {
             ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
                 FileManagerDrawer(
@@ -186,6 +175,7 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
         Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
                 snackbarHost = { SnackbarHost(snackbarHostState) },
+                contentWindowInsets = WindowInsets.statusBars,
                 topBar = {
                     Column {
                         TopAppBar(
@@ -362,31 +352,29 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
                         }
                     }
                 },
-                bottomBar = {
-                    Column {
-                        HorizontalDivider(
-                            thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant
-                        )
-                        // 使用配置中的自定义符号
-                        SymbolBar(
-                            viewModel = viewModel,
-                            symbols = editorConfig.getSymbolList()
-                        )
-                    }
-                },
+
                 content = { innerPadding ->
-                    Column(modifier = Modifier.padding(innerPadding)) {
-                        AnimatedVisibility(visible = showInitialLoader || isBuilding) {
-                            LinearProgressIndicator(
-                                modifier = Modifier.fillMaxWidth(),
-                                strokeCap = StrokeCap.Butt
-                            )
+                    BoxWithConstraints(modifier = Modifier.padding(innerPadding).fillMaxSize().imePadding()) {
+                        val availableEditorHeight = maxHeight // 这就是 EditorPanelLayout 可以用的全部高度
+                        EditorPanelLayout(
+                            viewModel = viewModel,
+                            symbols = editorConfig.getSymbolList(),
+                            modifier = Modifier.height(availableEditorHeight) // 将精确高度传递给 EditorPanelLayout
+                            // 将精确高度传递给 EditorPanelLayout
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                AnimatedVisibility(visible = showInitialLoader || isBuilding) {
+                                    LinearProgressIndicator(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        strokeCap = StrokeCap.Butt
+                                    )
+                                }
+                                EditCode(
+                                    modifier = Modifier.fillMaxSize(),
+                                    viewModel = viewModel
+                                )
+                            }
                         }
-                        EditCode(
-                            modifier = Modifier.fillMaxSize(),
-                            viewModel = viewModel
-                        )
                     }
                 }
             )
@@ -502,33 +490,7 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
 
 // ---------------- 辅助函数 ----------------
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SymbolBar(viewModel: EditorViewModel, symbols: List<String>) {
-    BottomAppBar(
-        modifier = Modifier
-            .imePadding()
-            .height(48.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            symbols.forEach { symbol ->
-                Box(
-                    modifier = Modifier
-                        .clickable { viewModel.insertSymbol(symbol) }
-                        .padding(horizontal = 16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = symbol, style = MaterialTheme.typography.titleMedium)
-                }
-            }
-        }
-    }
-}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

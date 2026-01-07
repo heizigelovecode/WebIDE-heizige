@@ -48,7 +48,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
@@ -69,10 +68,10 @@ fun Color.luminance(): Float {
 
 private val PRESET_FONTS = listOf(
     "默认字体" to "",
-    "JetBrains Mono" to "JetBrainsMono-Regular.ttf",
-    "Roboto Mono" to "RobotoMono-Regular.ttf",
-    "Source Code Pro" to "SourceCodePro-Regular.ttf",
-    "Comic Sans" to "Comic-Sans-MS-Regular-2.ttf"
+    "JetBrains Mono" to "ttf/JetBrainsMono-Regular.ttf",
+    "Roboto Mono" to "ttf/RobotoMono-Regular.ttf",
+    "Source Code Pro" to "ttf/SourceCodePro-Regular.ttf",
+    "Comic Sans" to "ttf/Comic-Sans-MS-Regular-2.ttf"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,11 +93,12 @@ fun SettingsScreen(
     var showInvisibles by remember { mutableStateOf(prefs.getBoolean("editor_show_invisibles", false)) }
     var codeFolding by remember { mutableStateOf(prefs.getBoolean("editor_code_folding", true)) }
     var showToolbar by remember { mutableStateOf(prefs.getBoolean("editor_show_toolbar", true)) }
+    var lspEnabled by remember { mutableStateOf(prefs.getBoolean("editor_lsp_enabled", false)) }
     var fontPath by remember { mutableStateOf(prefs.getString("editor_font_path", "") ?: "") }
     var customSymbols by remember { mutableStateOf(prefs.getString("editor_custom_symbols", "Tab,<,>,/,=,\",',!,?,;,:,{,},[,],(,),+,-,*,_,&,|") ?: "") }
 
     // 自动保存
-    LaunchedEffect(tabWidth, wordWrap, showInvisibles, codeFolding, showToolbar, fontPath, customSymbols) {
+    LaunchedEffect(tabWidth, wordWrap, showInvisibles, codeFolding, showToolbar, lspEnabled, fontPath, customSymbols) {
         prefs.edit {
             putFloat("editor_font_size", fontSize)
             putInt("editor_tab_width", tabWidth)
@@ -106,6 +106,7 @@ fun SettingsScreen(
             putBoolean("editor_show_invisibles", showInvisibles)
             putBoolean("editor_code_folding", codeFolding)
             putBoolean("editor_show_toolbar", showToolbar)
+            putBoolean("editor_lsp_enabled", lspEnabled)
             putString("editor_font_path", fontPath)
             putString("editor_custom_symbols", customSymbols)
         }
@@ -158,6 +159,8 @@ fun SettingsScreen(
                     onCodeFoldingChange = { codeFolding = it },
                     showToolbar = showToolbar,
                     onShowToolbarChange = { showToolbar = it },
+                    lspEnabled = lspEnabled,
+                    onLspEnabledChange = { lspEnabled = it },
                     fontPath = fontPath,
                     onFontPathChange = { fontPath = it },
                     customSymbols = customSymbols,
@@ -256,6 +259,8 @@ fun EditorSettingsItem(
     onCodeFoldingChange: (Boolean) -> Unit,
     showToolbar: Boolean,
     onShowToolbarChange: (Boolean) -> Unit,
+    lspEnabled: Boolean,
+    onLspEnabledChange: (Boolean) -> Unit,
     fontPath: String,
     onFontPathChange: (String) -> Unit,
     customSymbols: String,
@@ -302,6 +307,7 @@ fun EditorSettingsItem(
                         exit = fadeOut(tween(textFadeDuration)) + shrinkVertically(tween(textFadeDuration), shrinkTowards = Alignment.Top)
                     ) {
                         val displayFont = if(fontPath.isBlank()) "系统默认" else fontPath.substringAfterLast("/")
+                        val lspStatus = if(lspEnabled) "LSP开启" else "LSP关闭"
                         Text(
                             text = "${tabWidth}空格缩进 · $displayFont",
                             style = MaterialTheme.typography.bodySmall,
@@ -333,6 +339,10 @@ fun EditorSettingsItem(
                 Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(16.dp))
+
+                    Text("智能辅助", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    CompactSwitchRow("LSP 代码补全", lspEnabled, onLspEnabledChange)
+                    Spacer(modifier = Modifier.height(24.dp))
 
                     // === 1. 缩进设置 (Segmented Style) ===
                     Text("缩进宽度", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)

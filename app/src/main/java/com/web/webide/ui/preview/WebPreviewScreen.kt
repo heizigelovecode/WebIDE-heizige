@@ -99,7 +99,9 @@ class TinyWebServer(private val rootDir: File) {
                     try {
                         val client = serverSocket?.accept() ?: break
                         thread { handleClient(client) }
-                    } catch (e: Exception) { break }
+                    } catch (e: Exception) {
+                        break
+                    }
                 }
             }
             LogCatcher.i("WebServer", "Started: http://127.0.0.1:$port")
@@ -111,7 +113,10 @@ class TinyWebServer(private val rootDir: File) {
 
     fun stop() {
         isRunning.set(false)
-        try { serverSocket?.close() } catch (e: Exception) {}
+        try {
+            serverSocket?.close()
+        } catch (e: Exception) {
+        }
     }
 
     private fun handleClient(socket: Socket) {
@@ -121,7 +126,9 @@ class TinyWebServer(private val rootDir: File) {
 
             val requestLine = input.readLine() ?: run { socket.close(); return }
             val parts = requestLine.split(" ")
-            if (parts.size < 2) { socket.close(); return }
+            if (parts.size < 2) {
+                socket.close(); return
+            }
 
             // 1. 路径解码
             var rawPath = parts[1]
@@ -165,8 +172,30 @@ class TinyWebServer(private val rootDir: File) {
 
             // 3. 响应结果
             if (targetFile != null && targetFile.exists()) {
+                var fileBytes = targetFile.readBytes()
                 val contentType = getMimeType(targetFile.name)
-                val fileBytes = targetFile.readBytes()
+                val isHtml = contentType.contains("html")
+                val shouldInject = true
+                if (isHtml && shouldInject) {
+                    val originalHtml = String(fileBytes, Charsets.UTF_8)
+                    val injection = """
+            <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+            <script>eruda.init();</script>
+        """.trimIndent()
+
+                    // 插在 <head> 后面，保证最先执行
+                    val modifiedHtml = if (originalHtml.contains("<head>")) {
+                        originalHtml.replace("<head>", "<head>\n$injection")
+                    } else {
+                        // 如果没有 head，就插在 html 后面
+                        "<html>\n$injection\n" + originalHtml.substringAfter("<html>")
+                    }
+
+                    fileBytes = modifiedHtml.toByteArray(Charsets.UTF_8)
+                }
+
+
+
 
                 output.writeBytes("HTTP/1.1 200 OK\r\n")
                 output.writeBytes("Content-Type: $contentType\r\n")
@@ -184,7 +213,10 @@ class TinyWebServer(private val rootDir: File) {
             output.flush()
             socket.close()
         } catch (e: Exception) {
-            try { socket.close() } catch (e2: Exception) {}
+            try {
+                socket.close()
+            } catch (e2: Exception) {
+            }
         }
     }
 
@@ -210,9 +242,12 @@ class TinyWebServer(private val rootDir: File) {
 // UA 常量
 object UserAgents {
     const val DEFAULT = "Default"
-    const val PC = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    const val IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-    const val ANDROID = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
+    const val PC =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    const val IPHONE =
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    const val ANDROID =
+        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -240,10 +275,12 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
 
     DisposableEffect(Unit) {
         val window = activity?.window
-        val originalOrientation = activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        val originalOrientation =
+            activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         var originalStatusBarColor = AndroidColor.TRANSPARENT
         var originalIsLightStatusBars = true
-        var originalSystemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        var originalSystemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
         if (window != null) {
             val controller = WindowCompat.getInsetsController(window, window.decorView)
@@ -265,14 +302,26 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
     }
 
     // --- 2. 状态与配置 ---
-    val prefs = remember { context.getSharedPreferences("WebIDE_Project_Settings", Context.MODE_PRIVATE) }
+    val prefs =
+        remember { context.getSharedPreferences("WebIDE_Project_Settings", Context.MODE_PRIVATE) }
     var isDebugEnabled by remember { mutableStateOf(prefs.getBoolean("debug_$folderName", false)) }
-    var currentUAType by remember { mutableStateOf(prefs.getString("ua_type_$folderName", UserAgents.DEFAULT) ?: UserAgents.DEFAULT) }
+    var currentUAType by remember {
+        mutableStateOf(
+            prefs.getString(
+                "ua_type_$folderName",
+                UserAgents.DEFAULT
+            ) ?: UserAgents.DEFAULT
+        )
+    }
     var showUAMenu by remember { mutableStateOf(false) }
     var configRefreshTrigger by remember { mutableLongStateOf(0L) }
     var isJsHandlingBack by remember { mutableStateOf(false) }
 
-    val webAppConfig = produceState<JSONObject?>(initialValue = null, key1 = projectDir, key2 = configRefreshTrigger) {
+    val webAppConfig = produceState<JSONObject?>(
+        initialValue = null,
+        key1 = projectDir,
+        key2 = configRefreshTrigger
+    ) {
         value = withContext(Dispatchers.IO) {
             val configFile = File(projectDir, "webapp.json")
             if (configFile.exists()) {
@@ -280,28 +329,45 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
                     val rawJson = configFile.readText()
                     val cleanJson = rawJson.lines().joinToString("\n") { line ->
                         val index = line.indexOf("//")
-                        if (index != -1 && !line.substring(0, index).trim().endsWith(":") && !line.contains("http")) line.substring(0, index) else line
+                        if (index != -1 && !line.substring(0, index).trim()
+                                .endsWith(":") && !line.contains("http")
+                        ) line.substring(0, index) else line
                     }
                     JSONObject(cleanJson)
-                } catch (e: Exception) { null }
+                } catch (e: Exception) {
+                    null
+                }
             } else null
         }
     }
     val config = webAppConfig.value
 
     // 权限
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     LaunchedEffect(config) {
         config?.optJSONArray("permissions")?.let { arr ->
             val list = mutableListOf<String>()
             for (i in 0 until arr.length()) list.add(arr.getString(i))
-            val needed = list.filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }
+            val needed = list.filter {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    it
+                ) != PackageManager.PERMISSION_GRANTED
+            }
             if (needed.isNotEmpty()) permissionLauncher.launch(needed.toTypedArray())
         }
     }
 
     // 屏幕与全屏
-    var isFullScreenConfig by remember(config) { mutableStateOf(config?.optBoolean("fullscreen", false) == true) }
+    var isFullScreenConfig by remember(config) {
+        mutableStateOf(
+            config?.optBoolean(
+                "fullscreen",
+                false
+            ) == true
+        )
+    }
     var isUserFullScreen by remember(isFullScreenConfig) { mutableStateOf(isFullScreenConfig) }
 
     LaunchedEffect(config, isUserFullScreen) {
@@ -309,24 +375,34 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
             val controller = WindowCompat.getInsetsController(window, window.decorView)
 
             config?.optString("orientation")?.let { ori ->
-                val target = when (ori) {
-                    "landscape" -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                    "portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                val target = when (ori.lowercase()) {
+                    "landscape", "1" -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE // 横屏
+                    "portrait", "0" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT   // 竖屏
+                    "sensor", "4", "auto" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR // 自动旋转
                     else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 }
-                if (activity.requestedOrientation != target) activity.requestedOrientation = target
+                if (activity.requestedOrientation != target) {
+                    activity.requestedOrientation = target
+                }
             }
+            // --- 修改结束 ---
 
             if (isUserFullScreen) {
                 controller.hide(WindowInsetsCompat.Type.systemBars())
-                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             } else {
                 controller.show(WindowInsetsCompat.Type.systemBars())
                 val sbConfig = config?.optJSONObject("statusBar")
                 if (sbConfig != null) {
                     val color = sbConfig.optString("backgroundColor", "#FFFFFF")
-                    window.statusBarColor = try { AndroidColor.parseColor(color) } catch(e: Exception) { AndroidColor.WHITE }
-                    controller.isAppearanceLightStatusBars = (sbConfig.optString("style", "dark") == "dark")
+                    window.statusBarColor = try {
+                        AndroidColor.parseColor(color)
+                    } catch (e: Exception) {
+                        AndroidColor.WHITE
+                    }
+                    controller.isAppearanceLightStatusBars =
+                        (sbConfig.optString("style", "dark") == "dark")
                 } else {
                     window.statusBarColor = AndroidColor.WHITE
                     controller.isAppearanceLightStatusBars = true
@@ -349,16 +425,26 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
 
     // --- 4. WebView 交互 ---
     var filePathCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
-    val fileChooserLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        filePathCallback?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data))
-        filePathCallback = null
-    }
+    val fileChooserLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            filePathCallback?.onReceiveValue(
+                WebChromeClient.FileChooserParams.parseResult(
+                    result.resultCode,
+                    result.data
+                )
+            )
+            filePathCallback = null
+        }
 
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
-    val refreshKey = remember(config, isDebugEnabled, currentUAType, serverPort) { System.nanoTime() }
+    val refreshKey =
+        remember(config, isDebugEnabled, currentUAType, serverPort) { System.nanoTime() }
 
     BackHandler {
-        if (isJsHandlingBack) webViewRef?.evaluateJavascript("if(window.onAndroidBack) window.onAndroidBack();", null)
+        if (isJsHandlingBack) webViewRef?.evaluateJavascript(
+            "if(window.onAndroidBack) window.onAndroidBack();",
+            null
+        )
         else if (webViewRef?.canGoBack() == true) webViewRef?.goBack()
         else navController.popBackStack()
     }
@@ -371,18 +457,33 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
                     title = {
                         Column {
                             Text("App 预览")
-                            if (serverPort != 0) Text(":$serverPort", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            if (serverPort != 0) Text(
+                                ":$serverPort",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray
+                            )
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                "返回"
+                            )
+                        }
                     },
                     actions = {
                         Box {
                             IconButton(onClick = { showUAMenu = true }) {
-                                Icon(Icons.Default.Devices, "UA", tint = if (currentUAType != UserAgents.DEFAULT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(
+                                    Icons.Default.Devices,
+                                    "UA",
+                                    tint = if (currentUAType != UserAgents.DEFAULT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                            DropdownMenu(expanded = showUAMenu, onDismissRequest = { showUAMenu = false }) {
+                            DropdownMenu(
+                                expanded = showUAMenu,
+                                onDismissRequest = { showUAMenu = false }) {
                                 listOf(
                                     UserAgents.DEFAULT to "默认 (Mobile)",
                                     UserAgents.PC to "PC / Desktop",
@@ -404,17 +505,32 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
                             prefs.edit().putBoolean("debug_$folderName", isDebugEnabled).apply()
                             webViewRef?.reload()
                         }) {
-                            Icon(Icons.Default.BugReport, "调试", tint = if (isDebugEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(
+                                Icons.Default.BugReport,
+                                "调试",
+                                tint = if (isDebugEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        IconButton(onClick = { webViewRef?.reload() }) { Icon(Icons.Default.Refresh, "刷新") }
-                        IconButton(onClick = { isUserFullScreen = true }) { Icon(Icons.Default.Fullscreen, "全屏") }
+                        IconButton(onClick = { webViewRef?.reload() }) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                "刷新"
+                            )
+                        }
+                        IconButton(onClick = {
+                            isUserFullScreen = true
+                        }) { Icon(Icons.Default.Fullscreen, "全屏") }
                     }
                 )
             }
         },
         containerColor = if (isUserFullScreen) Color.Black else MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        Box(modifier = Modifier.padding(if (isUserFullScreen) PaddingValues(0.dp) else innerPadding).fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .padding(if (isUserFullScreen) PaddingValues(0.dp) else innerPadding)
+                .fillMaxSize()
+        ) {
             if (serverPort == 0) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else {
@@ -432,7 +548,13 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
                                     manualUA = currentUAType,
                                     onShowFileChooser = { cb, p ->
                                         filePathCallback = cb
-                                        try { p?.createIntent()?.let { fileChooserLauncher.launch(it); true } ?: false } catch(e: Exception) { false }
+                                        try {
+                                            p?.createIntent()
+                                                ?.let { fileChooserLauncher.launch(it); true }
+                                                ?: false
+                                        } catch (e: Exception) {
+                                            false
+                                        }
                                     },
                                     onBackStateChange = { isJsHandlingBack = it }
                                 )
@@ -447,7 +569,11 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
             if (isUserFullScreen) {
                 IconButton(
                     onClick = { isUserFullScreen = false },
-                    modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp).background(Color.Black.copy(0.3f), CircleShape)
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(16.dp)
+                        .background(Color.Black.copy(0.3f), CircleShape)
                 ) {
                     Icon(Icons.Default.FullscreenExit, "退出", tint = Color.White)
                 }
@@ -515,7 +641,8 @@ private fun configureFullWebView(
     val packageName = config?.optString("package", "com.example.webapp") ?: "com.web.preview"
 
     // 1. 创建原生 Interface
-    val fullInterface = FullWebAppInterface(context, webView, packageName, projectDir, onBackStateChange)
+    val fullInterface =
+        FullWebAppInterface(context, webView, packageName, projectDir, onBackStateChange)
     webView.addJavascriptInterface(
         FullWebAppInterface(context, webView, packageName, projectDir, onBackStateChange),
         "Android"
@@ -544,8 +671,12 @@ private fun configureFullWebView(
             }
             return false
         }
+
         override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-            LogCatcher.d("WebPreview_JS", "[${consoleMessage?.messageLevel()}] ${consoleMessage?.message()}")
+            val msg =
+                "[JS Console] ${consoleMessage?.message()} -- line ${consoleMessage?.lineNumber()}"
+            // 使用 Log.e (Error级别) 确保在 Logcat 红色显示，不容易被过滤
+            android.util.Log.e("WebView_Console", msg)
             return true
         }
     }
@@ -564,9 +695,13 @@ private fun configureFullWebView(
             request.setDescription("Downloading file...")
             request.setTitle(filename)
             request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, filename)
+            request.setDestinationInExternalPublicDir(
+                android.os.Environment.DIRECTORY_DOWNLOADS,
+                filename
+            )
 
-            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+            val dm =
+                context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
             dm.enqueue(request)
             Toast.makeText(context, "正在下载: $filename", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
@@ -582,16 +717,30 @@ private fun configureFullWebView(
     webView.webViewClient = object : WebViewClient() {
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
-            val prefs = context.getSharedPreferences("WebIDE_Project_Settings", Context.MODE_PRIVATE)
-            if (prefs.getBoolean("debug_${projectDir.name}", false)) {
+
+            // --- 修改开始：增加调试日志 ---
+            val prefs =
+                context.getSharedPreferences("WebIDE_Project_Settings", Context.MODE_PRIVATE)
+            val isDebug = prefs.getBoolean("debug_${projectDir.name}", false)
+
+            android.util.Log.e("WebView_Inject", "页面加载完毕: $url, 调试开关状态: $isDebug")
+
+            if (isDebug) {
                 injectEruda(context, view)
             }
+            // --- 修改结束 ---
         }
 
-        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+        override fun shouldOverrideUrlLoading(
+            view: WebView?,
+            request: WebResourceRequest?
+        ): Boolean {
             val url = request?.url.toString()
             if (url.startsWith("tel:") || url.startsWith("mailto:") || url.startsWith("intent:")) {
-                try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))); return true } catch (e: Exception) {}
+                try {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))); return true
+                } catch (e: Exception) {
+                }
             }
             return false
         }
@@ -600,21 +749,78 @@ private fun configureFullWebView(
 }
 
 // --- 注入 Eruda ---
+
 private fun injectEruda(context: Context, webView: WebView?) {
     if (webView == null) return
-    try {
-        val erudaCode = context.assets.open("eruda.min.js").bufferedReader().use { it.readText() }
-        webView.evaluateJavascript(erudaCode + "; if(window.eruda){ eruda.init(); }", null)
+
+    // 【改进1】跳过 about:blank，消除 localStorage 报错
+    val currentUrl = webView.url
+    if (currentUrl == null || currentUrl == "about:blank") {
+        return
+    }
+
+    android.util.Log.e("WebView_Inject", "开始注入 Eruda -> $currentUrl")
+
+    val scriptContent = try {
+        context.assets.open("eruda.min.js").bufferedReader().use { it.readText() }
     } catch (e: Exception) {
-        val cdnJs = """
-            (function () { 
-                if (window.eruda) return;
-                var script = document.createElement('script'); 
-                script.src = "https://cdn.jsdelivr.net/npm/eruda"; 
-                document.body.appendChild(script); 
-                script.onload = function () { eruda.init(); } 
-            })();
+        null
+    }
+
+    val finalScript = if (!scriptContent.isNullOrEmpty()) {
         """
-        webView.evaluateJavascript(cdnJs, null)
+        try {
+            // 如果已经存在，不要重复注入
+            if (window.eruda) {
+                console.log('Eruda already injected');
+            } else {
+                $scriptContent
+                eruda.init({
+                    tool: ['console', 'elements', 'network', 'resources'],
+                    useShadowDom: true,
+                    autoScale: true,
+                    defaults: {
+                        displaySize: 50,
+                        transparency: 0.9,
+                        theme: 'Dracula'
+                    }
+                });
+                
+                // 【改进2】强制设置图标位置和层级，防止被网页挡住
+                var entryBtn = document.querySelector('.eruda-entry-btn');
+                if(entryBtn) {
+                    entryBtn.style.zIndex = "999999";
+                    entryBtn.style.position = "fixed";
+                    entryBtn.style.bottom = "20px";
+                    entryBtn.style.right = "20px";
+                }
+                
+                console.log('Eruda [Local] init success'); 
+                
+                // 【可选】如果你实在找不到图标，取消下面这行的注释，让面板直接弹出来
+                // eruda.show();
+            }
+        } catch(e) {
+            console.error('Eruda Init Error: ' + e.message);
+        }
+        """
+    } else {
+        // CDN 备用方案
+        """
+        (function () { 
+            if (window.eruda) return;
+            var script = document.createElement('script'); 
+            script.src = "https://cdn.jsdelivr.net/npm/eruda/eruda.min.js"; 
+            document.body.appendChild(script); 
+            script.onload = function () { 
+                eruda.init(); 
+                console.log('Eruda [CDN] init success'); 
+            };
+        })();
+        """
+    }
+
+    webView.evaluateJavascript(finalScript) { result ->
+        android.util.Log.i("WebView_Inject", "注入脚本执行完毕")
     }
 }

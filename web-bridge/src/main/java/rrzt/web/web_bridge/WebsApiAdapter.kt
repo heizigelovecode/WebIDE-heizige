@@ -67,6 +67,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import androidx.core.net.toUri
+import io.github.justlikecheese.nextoast.NexToast
 
 
 class WebsApiAdapter(
@@ -144,7 +145,7 @@ class WebsApiAdapter(
                 // 捕获脚本错误
                 mainHandler.post {
                     // AlertDialog 可能更好，这里简单用 Toast
-                    Toast.makeText(context, "脚本错误: ${e.message}", Toast.LENGTH_LONG).show()
+                    NexToast.makeText(context, "脚本错误: ${e.message}", Toast.LENGTH_LONG).show();
                 }
             }
         }.start()

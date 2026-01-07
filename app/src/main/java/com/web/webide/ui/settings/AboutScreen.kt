@@ -76,6 +76,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.web.webide.BuildConfig
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+
 // --- 1. 数据模型定义 ---
 
 // 开发者
@@ -176,7 +179,10 @@ fun AboutScreen(navController: NavController) {
     // 3. 捐赠名单
     val donorList = remember {
         listOf(
-            Donor("2051775505", "・是小浣熊哦・", "¥ 40.00", "2025.12"),
+            Donor("2051775505", "・是小浣熊哦・", "¥ 45.20", "2025.12"),
+            Donor("3268208143","肘开（有事电话）","¥ 20.00","2026.1") ,
+            Donor("2957148920","海纳百氚，有容乃大","¥ 8.88","2026.01.05.10:56")
+
         )
     }
 
@@ -562,7 +568,7 @@ private fun AppHeaderSection() {
                         modifier = Modifier.padding(top = 8.dp)
                     ) {
                         Text(
-                            text = "v0.2.2 Beta",
+                            text = "v${BuildConfig.VERSION_NAME}",
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,

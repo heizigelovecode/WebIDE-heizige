@@ -18,10 +18,6 @@
 
 
 
-import com.android.build.api.dsl.Packaging
-
-
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -38,8 +34,8 @@ android {
         applicationId = "com.web.webide"
         minSdk = 29
         targetSdk = 36
-        versionCode = 22
-        versionName = "0.2.2"
+        versionCode = 23
+        versionName = "0.2.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             //noinspection ChromeOsAbiSupport
@@ -67,7 +63,7 @@ android {
 
         release {
            // applicationIdSuffix = ".release"
-            versionNameSuffix = "-release"
+            versionNameSuffix = "-release-Preview"
 
             isMinifyEnabled = true
             isShrinkResources = true // 资源缩减
@@ -101,13 +97,28 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
+// 🔥🔥🔥添加jniLibs
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+    // 🔥🔥🔥添加jniLibs
 
+    // 🔥🔥🔥不压缩bin
+    androidResources {
+        noCompress += "bin"
+    }
+    // 🔥🔥🔥不压缩bin
 }
 
 android.applicationVariants.configureEach {
@@ -148,6 +159,8 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.compose.ui)
+    // 🔥🔥🔥添加终端依赖
+    implementation(project(":core:main"))
     // LSP 支持
     implementation(project(":editor-lsp"))
     implementation(libs.lsp4j)
