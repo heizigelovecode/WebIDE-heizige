@@ -227,8 +227,8 @@ private fun IntroContent() {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(modifier = Modifier.size(160.dp)) { WebIDE_Icon() }
-            Spacer(Modifier.height(40.dp))
+            Box(modifier = Modifier.size(250.dp)) { WebIDE_Icon() }
+           // Spacer(Modifier.height(20.dp))
             Text(
                 "WebIDE",
                 style = MaterialTheme.typography.displayMedium.copy(
