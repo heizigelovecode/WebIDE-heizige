@@ -56,7 +56,6 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -68,7 +67,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.navigation.NavController
-import com.web.webide.R
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.entity.Library
 import com.mikepenz.aboutlibraries.util.withContext
@@ -78,7 +76,6 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.web.webide.BuildConfig
 import com.web.webide.ui.components.WebIDE_Icon
-import kotlinx.serialization.descriptors.buildClassSerialDescriptor
 
 // --- 1. 数据模型定义 ---
 
