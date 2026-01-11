@@ -37,10 +37,47 @@ import com.rk.terminal.ui.screens.terminal.virtualkeys.VirtualKeysInfo
 import com.rk.terminal.ui.screens.terminal.virtualkeys.VirtualKeysListener
 import com.rk.terminal.ui.screens.terminal.virtualkeys.VirtualKeysConstants
 import com.rk.libcommons.application
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun TerminalScreen() {
     val context = LocalContext.current
+
+    // 🔥 新增状态：标记环境是否准备就绪
+    var isEnvironmentReady by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (application == null) application = context.applicationContext as Application
+
+        // 🔥 在 IO 线程执行资源复制和解压
+        withContext(Dispatchers.IO) {
+            SetupWorker.prepareEnvironment(context)
+        }
+
+        // 环境准备好后，标记为 true
+        isEnvironmentReady = true
+
+        // 只有在没有会话时才创建新会话
+        if (SessionManager.sessions.isEmpty()) {
+            SessionManager.addNewSession(context)
+        }
+    }
+
+    // 🔥 如果环境没准备好，显示加载进度条
+    if (!isEnvironmentReady) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("正在初始化 Linux 环境 (首次运行可能需要几十秒)...")
+            }
+        }
+        return // 🚨 提前返回，不渲染下面的终端组件
+    }
 
     LaunchedEffect(Unit) {
         if (application == null) application = context.applicationContext as Application

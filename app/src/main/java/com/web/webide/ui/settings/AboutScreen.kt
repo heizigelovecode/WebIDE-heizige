@@ -56,7 +56,6 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -68,7 +67,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.navigation.NavController
-import com.web.webide.R
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.entity.Library
 import com.mikepenz.aboutlibraries.util.withContext
@@ -77,7 +75,7 @@ import kotlinx.coroutines.withContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.web.webide.BuildConfig
-import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import com.web.webide.ui.components.WebIDE_Icon
 
 // --- 1. 数据模型定义 ---
 
@@ -150,6 +148,7 @@ fun AboutScreen(navController: NavController) {
     val teamMembers = remember {
         listOf(
             Developer("h465855hgg", "Lead", "Maintainer", Color(0xFF009688), "https://github.com/h465855hgg"),
+            Developer("Akimlc", "Theme", "", Color(0xFF009688), "https://github.com/Akimlc"),
             Developer("Claude", "UI", "Design", Color(0xFFD97757)),
             Developer("Gemini", "Arch", "Core", Color(0xFF4E8CFF)),
             Developer("DeepSeek", "Logic", "Editor", Color(0xFF6C5CE7))
@@ -489,7 +488,6 @@ private fun DonorCard(item: Donor) {
         }
     }
 }
-// --- 原有辅助组件 ---
 
 @Composable
 private fun AuthorNoteCard(onClose: () -> Unit) {
@@ -537,18 +535,7 @@ private fun AppHeaderSection() {
                 .height(250.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_w),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-                )
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_code),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                WebIDE_Icon()
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -871,3 +858,4 @@ fun LibraryDetailDialog(lib: Library, onDismiss: () -> Unit) {
         }
     }
 }
+

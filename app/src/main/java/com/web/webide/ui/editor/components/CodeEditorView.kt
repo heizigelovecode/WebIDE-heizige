@@ -143,6 +143,9 @@ fun CodeEditorView(
                 },
                 modifier = Modifier.fillMaxSize(),
                 update = { view ->
+                    //斜向滑动
+                    view.getProps().singleDirectionDragging = false
+
                     // 应用字体
                     view.typefaceText = editorTypeface
                     view.typefaceLineNumber = editorTypeface

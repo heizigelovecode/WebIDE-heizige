@@ -116,7 +116,7 @@ android {
 
     // 🔥🔥🔥不压缩bin
     androidResources {
-        noCompress += "bin"
+        noCompress += listOf("bin", "proot", "so", "2")
     }
     // 🔥🔥🔥不压缩bin
 }
