@@ -285,7 +285,7 @@ private fun PermissionsContent(
         PermissionCard(
             Icons.Default.Download,
             "应用安装",
-            "调试构建好的 APK 文件",
+            "安装构建好的 APK 文件",
             installGranted,
             onRequestInstallPermission
         )
