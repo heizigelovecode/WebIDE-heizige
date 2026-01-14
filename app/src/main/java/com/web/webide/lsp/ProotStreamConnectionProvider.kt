@@ -1,6 +1,3 @@
-// 文件: java/com/example/sorarunrun/lsp/ProotStreamConnectionProvider.kt
-// 把这个类替换进去，它会把通信内容打印到 Logcat
-
 package com.web.webide.lsp
 
 import android.content.Context
@@ -9,6 +6,7 @@ import com.web.webide.ui.terminal.AlpineManager
 import io.github.rosemoe.sora.lsp.client.connection.StreamConnectionProvider
 import java.io.FilterInputStream
 import java.io.FilterOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import kotlin.concurrent.thread
@@ -34,12 +32,19 @@ class ProotStreamConnectionProvider(
             process = pb.start()
             Log.d("LSP-Process", "进程启动成功 PID: ${process.toString()}")
 
-            // 监控错误流
+            // === 修复崩溃的关键点：监控错误流时增加 try-catch ===
             thread {
-                process?.errorStream?.bufferedReader()?.forEachLine {
-                    Log.e("LSP-Stderr", it)
+                try {
+                    process?.errorStream?.bufferedReader()?.forEachLine {
+                        Log.e("LSP-Stderr", it)
+                    }
+                } catch (e: IOException) {
+                    // 正常现象：当 destroy() 被调用时，流被关闭会抛出此异常，忽略即可
+                } catch (e: Exception) {
+                    Log.e("LSP-Stderr", "读取错误流失败", e)
                 }
             }
+            // ===========================================
 
         } catch (e: Exception) {
             Log.e("LSP-Process", "启动失败", e)
@@ -47,31 +52,44 @@ class ProotStreamConnectionProvider(
         }
     }
 
-    // 包装输入流，打印 LSP 回复给 Editor 的内容
+    // === 修复编译错误：使用 val 加 get()，而不是 fun ===
+
+    // 包装输入流，打印 LSP 回复给 Editor 的内容 (LSP -> App)
     override val inputStream: InputStream
         get() = object : FilterInputStream(process?.inputStream) {
             override fun read(b: ByteArray, off: Int, len: Int): Int {
-                val read = super.read(b, off, len)
-                if (read > 0) {
-                    val content = String(b, off, read)
-                     Log.v("LSP-RX", content) // 内容太多可以注释掉，只看是否有数据
-                    Log.v("LSP-RX", "收到 $read 字节数据")
+                try {
+                    val read = super.read(b, off, len)
+                    if (read > 0) {
+                        // 这里的日志用于调试，内容太多可以注释掉
+                        // Log.v("LSP-RX", "收到 $read 字节数据")
+                    }
+                    return read
+                } catch (e: IOException) {
+                    throw e
                 }
-                return read
             }
         }
 
-    // 包装输出流，打印 Editor 发送给 LSP 的内容
+    // 包装输出流，打印 Editor 发送给 LSP 的内容 (App -> LSP)
     override val outputStream: OutputStream
         get() = object : FilterOutputStream(process?.outputStream) {
             override fun write(b: ByteArray, off: Int, len: Int) {
-                val content = String(b, off, len)
-                Log.d("LSP-TX", "发送: $content")
-                super.write(b, off, len)
+                try {
+                    val content = String(b, off, len)
+                    val logContent = if (content.length > 200) content.substring(0, 200) + "..." else content
+                    Log.d("LSP-TX", "发送: $logContent")
+
+                    super.write(b, off, len)
+                } catch (e: IOException) {
+                    throw e
+                }
             }
         }
 
     override fun close() {
+        Log.d("LSP-Process", "正在关闭 LSP 进程...")
         process?.destroy()
+        process = null
     }
 }

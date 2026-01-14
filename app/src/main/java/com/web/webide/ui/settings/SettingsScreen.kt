@@ -81,7 +81,8 @@ fun SettingsScreen(
     currentThemeState: ThemeState,
     logConfigState: LogConfigState,
     onThemeChange: (modeIndex: Int, themeIndex: Int, customColor: Color, isMonet: Boolean, isCustom: Boolean) -> Unit,
-    onLogConfigChange: (enabled: Boolean, filePath: String) -> Unit
+    onLogConfigChange: (enabled: Boolean, filePath: String) -> Unit,
+    editorViewModel: com.web.webide.ui.editor.viewmodel.EditorViewModel? = null
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE) }
@@ -97,6 +98,9 @@ fun SettingsScreen(
     var fontPath by remember { mutableStateOf(prefs.getString("editor_font_path", "") ?: "") }
     var customSymbols by remember { mutableStateOf(prefs.getString("editor_custom_symbols", "Tab,<,>,/,=,\",',!,?,;,:,{,},[,],(,),+,-,*,_,&,|") ?: "") }
 
+    // 保存之前的 LSP 状态，用于检测变化
+    var previousLspEnabled by remember { mutableStateOf(lspEnabled) }
+
     // 自动保存
     LaunchedEffect(tabWidth, wordWrap, showInvisibles, codeFolding, showToolbar, lspEnabled, fontPath, customSymbols) {
         prefs.edit {
@@ -109,6 +113,12 @@ fun SettingsScreen(
             putBoolean("editor_lsp_enabled", lspEnabled)
             putString("editor_font_path", fontPath)
             putString("editor_custom_symbols", customSymbols)
+        }
+
+        // 检测 LSP 状态变化，重新加载所有编辑器
+        if (lspEnabled != previousLspEnabled) {
+            editorViewModel?.reloadAllEditors(context)
+            previousLspEnabled = lspEnabled
         }
     }
 
