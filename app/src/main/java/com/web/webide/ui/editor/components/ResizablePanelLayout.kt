@@ -1,5 +1,6 @@
 package com.web.webide.ui.editor.components
 
+import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -18,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.web.webide.ui.editor.viewmodel.EditorViewModel
@@ -38,7 +40,7 @@ fun EditorPanelLayout(
     modifier: Modifier = Modifier, // 接收父级传递的 Modifier，用于设置高度
     // 接收父级传递的 Modifier，用于设置高度
     // 默认露出高度稍微加一点，给导航栏留余地，或者由外部控制
-    peekHeight: Dp = 76.dp,
+    peekHeight: Dp = 86.dp,
     content: @Composable () -> Unit
 ) {
     val scaffoldState = rememberBottomSheetScaffoldState(
@@ -50,7 +52,7 @@ fun EditorPanelLayout(
 
     val isExpanded = scaffoldState.bottomSheetState.targetValue == SheetValue.Expanded
     var selectedTabIndex by remember { mutableIntStateOf(3) }
-    val tabs = PanelPage.values()
+    val tabs = PanelPage.entries.toTypedArray()
 
     // 1. 使用 BoxWithConstraints 获取当前可用空间（即 TopBar 下方到屏幕底部的距离）
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -83,18 +85,60 @@ fun EditorPanelLayout(
                             // 改用 imePadding 处理键盘遮挡
                            // .imePadding()
                     ) {
-                        // --- 拖动手柄 ---
+                        // --- 拖动手柄 + LSP 状态 + 光标位置 ---
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
+                                .padding(vertical = 8.dp, horizontal = 16.dp)
                         ) {
+                            val context = LocalContext.current
+                            val prefs = remember { context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE) }
+                            val lspEnabled = prefs.getBoolean("editor_lsp_enabled", false)
+
+                            // LSP 状态 - 左侧（仅在启用时显示）
+                            if (lspEnabled) {
+                                Row(
+                                    modifier = Modifier.align(Alignment.CenterStart),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    val lspConnected = viewModel.openFiles.getOrNull(viewModel.activeFileIndex)?.lspEditor != null
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(if (lspConnected) androidx.compose.ui.graphics.Color(0xFF4CAF50) else androidx.compose.ui.graphics.Color(0xFFF44336))
+                                    )
+                                    Text(
+                                        text = if (lspConnected) "LSP Success" else "LSP Error",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            // 拖动手柄 - 绝对居中
                             Box(
                                 modifier = Modifier
                                     .width(36.dp).height(4.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                                    .align(Alignment.Center)
+                            )
+
+                            // 光标位置 - 右侧，实时更新
+                            var cursorPosition by remember { mutableStateOf(Pair(1, 1)) }
+                            LaunchedEffect(viewModel.activeFileIndex) {
+                                while (true) {
+                                    cursorPosition = viewModel.getCursorPosition()
+                                    kotlinx.coroutines.delay(100)
+                                }
+                            }
+                            Text(
+                                text = "Ln ${cursorPosition.first}, Col ${cursorPosition.second}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.align(Alignment.CenterEnd)
                             )
                         }
 
