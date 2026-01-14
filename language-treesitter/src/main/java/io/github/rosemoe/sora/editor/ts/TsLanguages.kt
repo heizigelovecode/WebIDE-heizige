@@ -4,11 +4,9 @@ import com.itsaky.androidide.treesitter.TSLanguage
 
 /**
  * HTML 语言绑定
- * 构造函数参数 1: 语言名称 "html"
- * 构造函数参数 2: Native 指针
  */
-class HtmlLanguage : TSLanguage("html", tree_sitter_html()) {
-    private companion object {
+class HtmlLanguage : TSLanguage("html", Companion.tree_sitter_html()) {
+    companion object {
         init {
             System.loadLibrary("tree-sitter-html")
         }
@@ -19,8 +17,8 @@ class HtmlLanguage : TSLanguage("html", tree_sitter_html()) {
 /**
  * CSS 语言绑定
  */
-class CssLanguage : TSLanguage("css", tree_sitter_css()) {
-    private companion object {
+class CssLanguage : TSLanguage("css", Companion.tree_sitter_css()) {
+    companion object {
         init {
             System.loadLibrary("tree-sitter-css")
         }
@@ -31,8 +29,8 @@ class CssLanguage : TSLanguage("css", tree_sitter_css()) {
 /**
  * JavaScript 语言绑定
  */
-class JavaScriptLanguage : TSLanguage("javascript", tree_sitter_javascript()) {
-    private companion object {
+class JavaScriptLanguage : TSLanguage("javascript", Companion.tree_sitter_javascript()) {
+    companion object {
         init {
             System.loadLibrary("tree-sitter-javascript")
         }
