@@ -174,7 +174,8 @@ fun App(
                 },
                 onLogConfigChange = { enabled, filePath ->
                     scope.launch { logConfigRepository.saveLogConfig(enabled, filePath) }
-                }
+                },
+                editorViewModel = mainViewModel
             )
         }
 
