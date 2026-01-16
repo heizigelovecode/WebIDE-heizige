@@ -450,7 +450,7 @@ fun ProjectListScreen(navController: NavController) {
                                 isPinned = pinnedProjects.contains(item.name),
                                 onClick = {
                                     // 点击项目时，如果需要保存此次搜索记录，可以在这里调用 saveSearchHistory(searchQuery)
-                                    navController.navigate("code_edit/${item.name}")
+                                    navController.safeNavigate("code_edit/${item.name}")
                                 },
                                 onTogglePin = { togglePin(item.name) },
                                 onDelete = {
