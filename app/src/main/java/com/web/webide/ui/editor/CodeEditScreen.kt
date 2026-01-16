@@ -59,6 +59,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.web.webide.build.ApkInstaller
+import com.web.webide.safeNavigate
 import com.web.webide.ui.editor.components.EditorPanelLayout
 import com.web.webide.ui.editor.components.EditorToolbar
 import com.web.webide.ui.editor.components.JumpLinePanel
@@ -211,7 +212,7 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
                                     scope.launch {
                                         scope.launch {
                                             viewModel.saveAllModifiedFiles(snackbarHostState)
-                                            navController.navigate("preview/$folderName")
+                                            navController.safeNavigate("preview/$folderName")
                                         }
                                     }
                                 }) {

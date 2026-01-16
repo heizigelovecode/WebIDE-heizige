@@ -57,6 +57,7 @@ import androidx.navigation.NavController
 import com.web.webide.core.utils.LogConfigState
 import com.web.webide.core.utils.ThemeState
 import com.web.webide.core.utils.WorkspaceManager
+import com.web.webide.safeNavigate
 import com.web.webide.ui.components.DirectorySelector
 import com.web.webide.ui.welcome.ColorPickerDialog
 import com.web.webide.ui.welcome.themeColors
@@ -209,7 +210,7 @@ fun SettingsScreen(
                     icon = Icons.Outlined.Info,
                     title = "关于",
                     subtitle = "版本信息与介绍",
-                    onClick = { navController.navigate("about") }
+                    onClick = { navController.safeNavigate("about") }
                 )
             }
 

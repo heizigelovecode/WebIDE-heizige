@@ -57,6 +57,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import androidx.core.content.edit
+import com.web.webide.safeNavigate
 
 // --- 常量定义 ---
 private const val PREFS_NAME = "project_prefs"
@@ -320,7 +321,7 @@ fun ProjectListScreen(navController: NavController) {
                                 }
                             }
                         }
-                        IconButton(onClick = { navController.navigate("settings") }) {
+                        IconButton(onClick = { navController.safeNavigate("settings") }) {
                             Icon(Icons.Default.Settings, "设置")
                         }
                     }
@@ -335,7 +336,7 @@ fun ProjectListScreen(navController: NavController) {
                 exit = fadeOut()
             ) {
                 ExtendedFloatingActionButton(
-                    onClick = { navController.navigate("new_project") },
+                    onClick = { navController.safeNavigate("new_project") },
                     icon = { Icon(Icons.Default.Add, "新建项目") },
                     text = { Text("新建项目") },
                     expanded = isFabExpanded
