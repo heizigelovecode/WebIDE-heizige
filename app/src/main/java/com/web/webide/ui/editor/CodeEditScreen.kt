@@ -740,10 +740,10 @@ private suspend fun performBuild(
     onResult: (BuildResultState) -> Unit
 ) {
     viewModel.saveAllModifiedFiles(snackbarHostState)
-    val prefs = context.getSharedPreferences("WebIDE_Project_Settings", android.content.Context.MODE_PRIVATE)
+    val prefs = context.getSharedPreferences("WebIDE_Project_Settings", Context.MODE_PRIVATE)
     val isDebug = prefs.getBoolean("debug_$folderName", false)
 
-    val configFile = java.io.File(projectPath, "webapp.json")
+    val configFile = File(projectPath, "webapp.json")
     var pkg = "com.example.webapp"
     var verName = "1.0"
     var verCode = "1"
@@ -764,7 +764,7 @@ private suspend fun performBuild(
 
             val iconName = json.optString("icon", "")
             if (iconName.isNotEmpty()) {
-                val iconFile = java.io.File(projectPath, iconName)
+                val iconFile = File(projectPath, iconName)
                 if (iconFile.exists()) iconPath = iconFile.absolutePath
             }
 
