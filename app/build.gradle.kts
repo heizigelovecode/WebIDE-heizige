@@ -132,7 +132,7 @@ android.applicationVariants.configureEach {
     }
 }
 
-aboutLibraries() {
+aboutLibraries {
     collect {
         fetchRemoteLicense = true
     }
