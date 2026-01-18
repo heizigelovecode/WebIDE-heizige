@@ -43,6 +43,7 @@ import com.web.webide.ui.projects.ProjectListScreen
 import com.web.webide.ui.projects.WorkspaceSelectionScreen
 import com.web.webide.ui.settings.AboutScreen
 import com.web.webide.ui.settings.SettingsScreen
+import com.web.webide.ui.terminal.TerminalScreen
 import kotlinx.coroutines.launch
 
 @Composable
@@ -182,6 +183,9 @@ fun App(
 
         composable("about") {
             AboutScreen(navController = navController)
+        }
+        composable("terminal") {
+            TerminalScreen(navController = navController)
         }
     }
 }

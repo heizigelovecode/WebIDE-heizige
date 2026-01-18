@@ -251,6 +251,14 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
                                                 isMoreMenuExpanded = false
                                             }
                                         )
+                                        DropdownMenuItem(
+                                            text = { Text("终端") },
+                                            onClick = {
+                                                isMoreMenuExpanded = false
+                                                // 🔥 跳转到独立的终端页面
+                                                navController.navigate("terminal")
+                                            }
+                                        )
                                         if (hasWebAppConfig) {
                                             DropdownMenuItem(
                                                 text = { Text("构建 APK") },

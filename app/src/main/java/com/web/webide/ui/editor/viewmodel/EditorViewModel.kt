@@ -370,13 +370,51 @@ class EditorViewModel : ViewModel() {
         hasShownInitialLoader = true
     }
 
+    // 在 EditorViewModel 类中找到这个方法并替换
+
     fun updateEditorTheme(seedColor: Color, isDark: Boolean) {
         editorInstances.values.forEach { editor ->
             val currentScheme = editor.colorScheme
+
+            // 1. 应用原有的主题颜色逻辑 (保持你原本的逻辑)
             EditorColorSchemeManager.applyThemeColors(currentScheme, seedColor, isDark)
+
+            // 2. 🔥🔥🔥 新增：手动设置代码补全窗口的颜色适配明暗模式 🔥🔥🔥
+            if (isDark) {
+                // === 深色模式 ===
+                // 补全窗口背景 (深灰色)
+                currentScheme.setColor(EditorColorScheme.COMPLETION_WND_BACKGROUND, 0xFF1E1F22.toInt())
+                // 补全主文字颜色 (白色)
+                currentScheme.setColor(EditorColorScheme.COMPLETION_WND_TEXT_PRIMARY, 0xFFFFFFFF.toInt())
+                // 补全副文字颜色/类型说明 (浅灰色)
+                currentScheme.setColor(EditorColorScheme.COMPLETION_WND_TEXT_SECONDARY, 0xFFBBBBBB.toInt())
+                // 当前选中项的背景颜色 (稍微亮一点的灰色)
+                currentScheme.setColor(EditorColorScheme.COMPLETION_WND_ITEM_CURRENT, 0xFF2C2D31.toInt())
+                // 滚动条滑块颜色
+                currentScheme.setColor(EditorColorScheme.SCROLL_BAR_THUMB, 0xFF555555.toInt())
+                // 滚动条滑块按下颜色
+                currentScheme.setColor(EditorColorScheme.SCROLL_BAR_THUMB_PRESSED, 0xFF777777.toInt())
+            } else {
+                // === 浅色模式 ===
+                // 补全窗口背景 (纯白或极浅灰)
+                currentScheme.setColor(EditorColorScheme.COMPLETION_WND_BACKGROUND, 0xFFF2F2F2.toInt())
+                // 补全主文字颜色 (黑色)
+                currentScheme.setColor(EditorColorScheme.COMPLETION_WND_TEXT_PRIMARY, 0xFF000000.toInt())
+                // 补全副文字颜色 (深灰色)
+                currentScheme.setColor(EditorColorScheme.COMPLETION_WND_TEXT_SECONDARY, 0xFF666666.toInt())
+                // 当前选中项的背景颜色 (浅蓝色或浅灰色，这里用 Material 的主色调变淡)
+                // 这里简单使用一个浅灰色，你也可以用 seedColor 混色
+                currentScheme.setColor(EditorColorScheme.COMPLETION_WND_ITEM_CURRENT, 0xFFDFE1E5.toInt())
+                // 滚动条颜色
+                currentScheme.setColor(EditorColorScheme.SCROLL_BAR_THUMB, 0xFFCCCCCC.toInt())
+                currentScheme.setColor(EditorColorScheme.SCROLL_BAR_THUMB_PRESSED, 0xFFAAAAAA.toInt())
+            }
+
+            // 3. 针对 TreeSitter 的彩虹括号配置 (保持不变)
             if (editor.editorLanguage is TsLanguage) {
                 configureRainbowColors(currentScheme)
             }
+
             editor.invalidate()
         }
     }

@@ -14,7 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,13 +23,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.web.webide.ui.editor.viewmodel.EditorViewModel
-import com.web.webide.ui.terminal.TerminalScreen
 
 enum class PanelPage(val title: String) {
     BUILD_LOG("构建"),
     DIAGNOSTICS("问题"),
-    GIT("Git"),
-    TERMINAL("终端")
+
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,7 +49,7 @@ fun EditorPanelLayout(
     )
 
     val isExpanded = scaffoldState.bottomSheetState.targetValue == SheetValue.Expanded
-    var selectedTabIndex by remember { mutableIntStateOf(3) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabs = PanelPage.entries.toTypedArray()
 
     // 1. 使用 BoxWithConstraints 获取当前可用空间（即 TopBar 下方到屏幕底部的距离）
@@ -152,29 +150,27 @@ fun EditorPanelLayout(
                         }
 
                         // --- Tab 栏 ---
-                        TabRow(
+                        SecondaryTabRow(
                             selectedTabIndex = selectedTabIndex,
+                            modifier = Modifier.height(48.dp),
                             containerColor = MaterialTheme.colorScheme.surface,
                             contentColor = MaterialTheme.colorScheme.primary,
-                            divider = {},
-                            indicator = { tabPositions ->
-                                if (selectedTabIndex < tabPositions.size) {
-                                    TabRowDefaults.SecondaryIndicator(
-                                        Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                                        color = MaterialTheme.colorScheme.primary
+                            indicator = {
+                                TabRowDefaults.SecondaryIndicator(
+                                    modifier = Modifier.tabIndicatorOffset(selectedTabIndex),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            divider = {}, // 不显示默认底部分割线
+                            tabs = {
+                                tabs.forEachIndexed { index, page ->
+                                    Tab(
+                                        selected = selectedTabIndex == index,
+                                        onClick = { selectedTabIndex = index },
+                                        text = { Text(page.title) }
                                     )
                                 }
-                            },
-                            modifier = Modifier.height(48.dp)
-                        ) {
-                            tabs.forEachIndexed { index, page ->
-                                Tab(
-                                    selected = selectedTabIndex == index,
-                                    onClick = { selectedTabIndex = index },
-                                    text = { Text(page.title) }
-                                )
-                            }
-                        }
+                            })
 
                         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -183,8 +179,6 @@ fun EditorPanelLayout(
                             when (tabs[selectedTabIndex]) {
                                 PanelPage.BUILD_LOG -> PlaceholderInfo("构建日志")
                                 PanelPage.DIAGNOSTICS -> PlaceholderInfo("诊断信息")
-                                PanelPage.GIT -> PlaceholderInfo("Git 面板")
-                                PanelPage.TERMINAL -> TerminalScreen()
                             }
                         }
 
