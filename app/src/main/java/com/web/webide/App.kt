@@ -25,6 +25,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -181,6 +182,15 @@ fun App(
 
         composable("about") {
             AboutScreen(navController = navController)
+        }
+    }
+}
+
+fun NavController.safeNavigate(route: String) {
+    val current = currentBackStackEntry?.destination?.route
+    if (current != route) {
+        navigate(route) {
+            launchSingleTop = true
         }
     }
 }

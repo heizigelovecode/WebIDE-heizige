@@ -57,6 +57,7 @@ import androidx.navigation.NavController
 import com.web.webide.core.utils.LogConfigState
 import com.web.webide.core.utils.ThemeState
 import com.web.webide.core.utils.WorkspaceManager
+import com.web.webide.safeNavigate
 import com.web.webide.ui.components.DirectorySelector
 import com.web.webide.ui.welcome.ColorPickerDialog
 import com.web.webide.ui.welcome.themeColors
@@ -209,7 +210,7 @@ fun SettingsScreen(
                     icon = Icons.Outlined.Info,
                     title = "关于",
                     subtitle = "版本信息与介绍",
-                    onClick = { navController.navigate("about") }
+                    onClick = { navController.safeNavigate("about") }
                 )
             }
 
@@ -317,7 +318,6 @@ fun EditorSettingsItem(
                         exit = fadeOut(tween(textFadeDuration)) + shrinkVertically(tween(textFadeDuration), shrinkTowards = Alignment.Top)
                     ) {
                         val displayFont = if(fontPath.isBlank()) "系统默认" else fontPath.substringAfterLast("/")
-                        val lspStatus = if(lspEnabled) "LSP开启" else "LSP关闭"
                         Text(
                             text = "${tabWidth}空格缩进 · $displayFont",
                             style = MaterialTheme.typography.bodySmall,

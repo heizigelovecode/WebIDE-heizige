@@ -35,7 +35,6 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +58,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.web.webide.build.ApkInstaller
+import com.web.webide.safeNavigate
 import com.web.webide.ui.editor.components.EditorPanelLayout
 import com.web.webide.ui.editor.components.EditorToolbar
 import com.web.webide.ui.editor.components.JumpLinePanel
@@ -211,7 +211,7 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
                                     scope.launch {
                                         scope.launch {
                                             viewModel.saveAllModifiedFiles(snackbarHostState)
-                                            navController.navigate("preview/$folderName")
+                                            navController.safeNavigate("preview/$folderName")
                                         }
                                     }
                                 }) {
@@ -528,32 +528,34 @@ fun EditCode(
                 contentAlignment = Alignment.Center
             ) { Text("未打开任何文件") }
         } else {
-            ScrollableTabRow(
+            SecondaryScrollableTabRow(
                 selectedTabIndex = pagerState.currentPage.coerceIn(0, openFiles.size - 1),
                 edgePadding = 0.dp,
-                divider = {},
-                indicator = { tabPositions ->
-                    if (tabPositions.isNotEmpty() && pagerState.currentPage < tabPositions.size) {
-                        Box(
-                            modifier = Modifier
-                                .tabIndicatorOffset(tabPositions[pagerState.currentPage])
-                                .height(3.dp)
-                                .background(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    shape = RoundedCornerShape(percent = 50)
-                                )
-                        )
-                    }
-                }) {
+                divider = { },
+                indicator = {
+                    Box(
+                        modifier = Modifier
+                            .tabIndicatorOffset(pagerState.currentPage.coerceIn(0, openFiles.size - 1))
+                            .height(3.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = RoundedCornerShape(percent = 50)
+                            )
+                    )
+                }
+            ) {
                 openFiles.forEachIndexed { index, editorState ->
                     Box {
-                        val displayName =
-                            if (editorState.isModified) "*${editorState.file.name}" else editorState.file.name
+                        val displayName = if (editorState.isModified) "*${editorState.file.name}" else editorState.file.name
+
                         Tab(
                             selected = pagerState.currentPage == index,
                             onClick = {
-                                if (pagerState.currentPage == index) expandedTabIndex =
-                                    index else scope.launch { pagerState.animateScrollToPage(index) }
+                                if (pagerState.currentPage == index) {
+                                    expandedTabIndex = index
+                                } else {
+                                    scope.launch { pagerState.animateScrollToPage(index) }
+                                }
                             },
                             text = {
                                 Text(
@@ -561,21 +563,25 @@ fun EditCode(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                            })
+                            }
+                        )
+
                         DropdownMenu(
                             expanded = expandedTabIndex == index,
-                            onDismissRequest = { expandedTabIndex = null }) {
+                            onDismissRequest = { expandedTabIndex = null }
+                        ) {
                             DropdownMenuItem(
                                 text = { Text("关闭") },
-                                onClick = { expandedTabIndex = null; viewModel.closeFile(index) })
+                                onClick = { expandedTabIndex = null; viewModel.closeFile(index) }
+                            )
                             DropdownMenuItem(
                                 text = { Text("关闭其他") },
-                                onClick = {
-                                    expandedTabIndex = null; viewModel.closeOtherFiles(index)
-                                })
+                                onClick = { expandedTabIndex = null; viewModel.closeOtherFiles(index) }
+                            )
                             DropdownMenuItem(
                                 text = { Text("关闭全部") },
-                                onClick = { expandedTabIndex = null; viewModel.closeAllFiles() })
+                                onClick = { expandedTabIndex = null; viewModel.closeAllFiles() }
+                            )
                         }
                     }
                 }
