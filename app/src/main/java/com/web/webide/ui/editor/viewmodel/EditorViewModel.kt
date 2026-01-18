@@ -270,7 +270,7 @@ class EditorViewModel : ViewModel() {
     private fun readAssetFile(context: Context, path: String): String {
         return try {
             context.assets.open(path).use { InputStreamReader(it).readText() }
-        } catch (e: Exception) { "" }
+        } catch (_: Exception) { "" }
     }
 
     // ======================================================
@@ -331,7 +331,20 @@ class EditorViewModel : ViewModel() {
     // ======================================================
     // 基础配置与权限
     // ======================================================
-
+    fun updateRenamedFile(oldFile: File, newFile: File) {
+        val index = openFiles.indexOfFirst { it.file.absolutePath == oldFile.absolutePath }
+        if (index != -1) {
+            val oldState = openFiles[index]
+            val newState = oldState.copy(file = newFile)
+            val mutableList = openFiles.toMutableList()
+            mutableList[index] = newState
+            openFiles = mutableList
+            val oldEditor = editorInstances.remove(oldFile.absolutePath)
+            if (oldEditor != null) {
+                editorInstances[newFile.absolutePath] = oldEditor
+            }
+        }
+    }
     fun reloadEditorConfig(context: Context) {
         val prefs = context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE)
         editorConfig = EditorConfig(
