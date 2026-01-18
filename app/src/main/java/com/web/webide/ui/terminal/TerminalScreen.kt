@@ -17,14 +17,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -95,20 +93,18 @@ fun TerminalScreen() {
                 .background(MaterialTheme.colorScheme.surface),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ScrollableTabRow(
+            SecondaryScrollableTabRow(
                 selectedTabIndex = SessionManager.currentSessionIndex,
                 containerColor = Color.Transparent,
                 edgePadding = 0.dp,
-                divider = {},
-                indicator = { tabPositions ->
-                    if (SessionManager.currentSessionIndex < tabPositions.size) {
-                        TabRowDefaults.SecondaryIndicator(
-                            Modifier.tabIndicatorOffset(tabPositions[SessionManager.currentSessionIndex]),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                },
-                modifier = Modifier.weight(1f)
+                divider = {}, // 不显示默认底部分割线
+                modifier = Modifier.weight(1f),
+                indicator = {
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(SessionManager.currentSessionIndex),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             ) {
                 SessionManager.sessions.forEachIndexed { index, session ->
                     val isSelected = SessionManager.currentSessionIndex == index
@@ -119,7 +115,7 @@ fun TerminalScreen() {
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = session.title ?: "终端 ${index + 1}",
+                                text = session.title,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if(isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -215,7 +211,7 @@ fun TerminalScreen() {
                                             .background(backgroundColor)
                                             .clickable {
                                                 // === 按键逻辑处理 ===
-                                                val session = currentSession ?: return@clickable
+                                                val session = currentSession
 
                                                 if (key.label == "CTRL") {
                                                     isCtrlPressed = !isCtrlPressed

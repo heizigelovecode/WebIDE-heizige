@@ -3,7 +3,6 @@
 package com.web.webide.ui.terminal
 
 import android.content.Context
-import android.os.Build
 import com.rk.terminal.ui.screens.terminal.stat
 import com.rk.terminal.ui.screens.terminal.vmstat
 import com.termux.terminal.TerminalEmulator
@@ -156,12 +155,8 @@ object AlpineManager {
         try {
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             versionName = pInfo.versionName ?: "Unknown"
-            versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            versionCode =
                 pInfo.longVersionCode
-            } else {
-                @Suppress("DEPRECATION")
-                pInfo.versionCode.toLong()
-            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
