@@ -59,6 +59,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import com.web.webide.build.ApkInstaller
 import com.web.webide.safeNavigate
 import com.web.webide.ui.editor.components.EditorPanelLayout
@@ -72,6 +73,7 @@ import com.web.webide.ui.welcome.colorToHex
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.web.webide.R
 
 // 构建结果状态
 sealed class BuildResultState {
@@ -190,7 +192,14 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
                         NavigationRailItem(
                             selected = selectedTab == SidebarTab.GIT,
                             onClick = { selectedTab = SidebarTab.GIT },
-                            icon = { Icon(Icons.Default.Source, contentDescription = "Git") }, // 需要引入 Source 图标
+                            icon = {
+                                Icon(
+                                    // 🔥 这里修改：使用 painterResource 加载 xml 资源
+                                    painter = painterResource(id = R.drawable.ic_git),
+                                    contentDescription = "Git",
+                                    modifier = Modifier.size(24.dp) // 建议加上尺寸限制，防止图标过大
+                                )
+                            },
                             label = { Text("Git") }
                         )
                     }
