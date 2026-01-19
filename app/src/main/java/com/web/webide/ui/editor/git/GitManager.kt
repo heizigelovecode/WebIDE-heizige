@@ -4,27 +4,36 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ListBranchCommand
+import org.eclipse.jgit.api.TransportConfigCallback
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.PersonIdent
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.transport.CredentialsProvider
+import org.eclipse.jgit.transport.SshTransport
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
+import org.eclipse.jgit.transport.sshd.ServerKeyDatabase
+import org.eclipse.jgit.transport.sshd.SshdSessionFactory
 import java.io.File
+import java.net.InetSocketAddress
+import java.security.PublicKey
 
-class GitManager(private val projectPath: String) {
+class GitManager(projectPath: String) {
     private val rootDir = File(projectPath)
+
+    // 用来存放临时 SSH 密钥的目录 (在项目目录下隐藏文件夹)
+    private val sshConfigDir = File(rootDir, ".git_ssh_config")
 
     fun isGitRepo(): Boolean = File(rootDir, ".git").exists()
 
+    // --- 分支获取 ---
     suspend fun getBranches(): List<GitBranch> = withContext(Dispatchers.IO) {
         if (!isGitRepo()) return@withContext emptyList()
         val git = Git.open(rootDir)
         val repo = git.repository
-        val currentBranchRef = repo.fullBranch // 例如 refs/heads/main
+        val currentBranchRef = repo.fullBranch
 
         val branchList = mutableListOf<GitBranch>()
-
-        // 1. 获取所有引用
         val refs = git.branchList().setListMode(ListBranchCommand.ListMode.ALL).call()
 
         refs.forEach { ref ->
@@ -33,29 +42,24 @@ class GitManager(private val projectPath: String) {
             var type = BranchType.LOCAL
 
             if (fullName.startsWith(Constants.R_HEADS)) {
-                // 本地分支: refs/heads/xxx
                 displayName = fullName.substring(Constants.R_HEADS.length)
                 type = BranchType.LOCAL
             } else if (fullName.startsWith(Constants.R_REMOTES)) {
-                // 远程分支: refs/remotes/origin/xxx
                 displayName = fullName.substring(Constants.R_REMOTES.length)
                 type = BranchType.REMOTE
             }
 
-            // 判断是否是当前 HEAD 指向的分支
             val isCurrent = (fullName == currentBranchRef)
-
             branchList.add(GitBranch(displayName, fullName, type, isCurrent))
         }
 
         git.close()
-        // 排序：当前分支在前，然后按本地/远程排序，最后按名字
         branchList.sortedWith(compareByDescending<GitBranch> { it.isCurrent }
-            .thenBy { it.type } // LOCAL (0) 在前, REMOTE (1) 在后 (enum 顺序)
+            .thenBy { it.type }
             .thenBy { it.name }
         )
     }
-    // --- 基础操作 ---
+
     suspend fun initRepo() = withContext(Dispatchers.IO) {
         Git.init().setDirectory(rootDir).call().close()
     }
@@ -78,12 +82,10 @@ class GitManager(private val projectPath: String) {
         changes.sortedBy { it.filePath }
     }
 
-    // --- 提交与推送 ---
     suspend fun commitAll(message: String, author: String, email: String) = withContext(Dispatchers.IO) {
         val git = Git.open(rootDir)
         git.add().addFilepattern(".").call()
 
-        // 处理删除的文件
         val status = git.status().call()
         if (status.missing.isNotEmpty() || status.removed.isNotEmpty()) {
             val rm = git.rm()
@@ -92,7 +94,6 @@ class GitManager(private val projectPath: String) {
             rm.call()
         }
 
-        // 🔥 核心修复：同时设置 Author 和 Committer，避免显示 "root"
         val person = PersonIdent(author, email)
         git.commit()
             .setMessage(message)
@@ -103,45 +104,111 @@ class GitManager(private val projectPath: String) {
         git.close()
     }
 
+    // -----------------------------------------------------------------------
+    // 🔥 Apache SSHD 核心配置
+    // -----------------------------------------------------------------------
+
+    /**
+     * 自定义 SessionFactory，告诉 SSHD 去哪里找 id_rsa 文件
+     */
+    class CustomSshSessionFactory(private val sshDir: File) : SshdSessionFactory() {
+        override fun getSshDirectory(): File = sshDir
+        override fun getHomeDirectory(): File = sshDir.parentFile
+
+        // 🔥 修复点：ServerKeyDatabase 是接口，不能用 Lambda，必须完整实现
+        override fun getServerKeyDatabase(homeDir: File, sshDir: File): ServerKeyDatabase {
+            return object : ServerKeyDatabase {
+                override fun lookup(
+                    connectAddress: String,
+                    remoteAddress: InetSocketAddress,
+                    config: ServerKeyDatabase.Configuration
+                ): List<PublicKey> {
+                    return emptyList()
+                }
+
+                override fun accept(
+                    connectAddress: String,
+                    remoteAddress: InetSocketAddress,
+                    serverKey: PublicKey,
+                    config: ServerKeyDatabase.Configuration,
+                    provider: CredentialsProvider?
+                ): Boolean {
+                    return true // 始终信任所有主机 Key (类似 StrictHostKeyChecking=no)
+                }
+            }
+        }
+    }
+
+    /**
+     * 准备 SSH 环境：将内存中的私钥字符串写入临时文件，供 SSHD 读取
+     */
+    private fun prepareSshEnvironment(auth: GitAuth): TransportConfigCallback {
+        return TransportConfigCallback { transport ->
+            if (transport is SshTransport) {
+                // 1. 准备目录
+                if (!sshConfigDir.exists()) sshConfigDir.mkdirs()
+
+                // 2. 写入私钥 (如果提供了)
+                if (auth.privateKey.isNotBlank()) {
+                    val keyFile = File(sshConfigDir, "id_rsa")
+                    // 为了安全，只有内容变动时才重写
+                    if (!keyFile.exists() || keyFile.readText() != auth.privateKey) {
+                        keyFile.writeText(auth.privateKey)
+                    }
+                }
+
+                // 3. 设置 Factory
+                transport.sshSessionFactory = CustomSshSessionFactory(sshConfigDir)
+            }
+        }
+    }
+
+    // --- 推送 (Push) ---
     suspend fun push(auth: GitAuth, remote: String = "origin") = withContext(Dispatchers.IO) {
         val git = Git.open(rootDir)
-        git.push()
-            .setRemote(remote)
-            .setCredentialsProvider(UsernamePasswordCredentialsProvider(auth.username, auth.token))
-            .call()
+        val cmd = git.push().setRemote(remote)
+
+        if (auth.type == AuthType.HTTPS) {
+            cmd.setCredentialsProvider(UsernamePasswordCredentialsProvider(auth.username, auth.token))
+        } else {
+            cmd.setTransportConfigCallback(prepareSshEnvironment(auth))
+        }
+
+        cmd.call()
         git.close()
     }
 
-    // --- 拉取与更新 ---
-    suspend fun fetch(auth: GitAuth, remote: String = "origin") = withContext(Dispatchers.IO) {
-        val git = Git.open(rootDir)
-        git.fetch()
-            .setRemote(remote)
-            .setCredentialsProvider(UsernamePasswordCredentialsProvider(auth.username, auth.token))
-            .call()
-        git.close()
-    }
-
+    // --- 拉取 (Pull) ---
     suspend fun pull(auth: GitAuth, remote: String = "origin") = withContext(Dispatchers.IO) {
         val git = Git.open(rootDir)
-        git.pull()
-            .setRemote(remote)
-            .setCredentialsProvider(UsernamePasswordCredentialsProvider(auth.username, auth.token))
-            .call()
+        val cmd = git.pull().setRemote(remote)
+
+        if (auth.type == AuthType.HTTPS) {
+            cmd.setCredentialsProvider(UsernamePasswordCredentialsProvider(auth.username, auth.token))
+        } else {
+            cmd.setTransportConfigCallback(prepareSshEnvironment(auth))
+        }
+
+        cmd.call()
         git.close()
     }
 
+    // --- 变基拉取 (Rebase) ---
     suspend fun pullRebase(auth: GitAuth, remote: String = "origin") = withContext(Dispatchers.IO) {
         val git = Git.open(rootDir)
-        git.pull()
-            .setRemote(remote)
-            .setRebase(true)
-            .setCredentialsProvider(UsernamePasswordCredentialsProvider(auth.username, auth.token))
-            .call()
+        val cmd = git.pull().setRemote(remote).setRebase(true)
+
+        if (auth.type == AuthType.HTTPS) {
+            cmd.setCredentialsProvider(UsernamePasswordCredentialsProvider(auth.username, auth.token))
+        } else {
+            cmd.setTransportConfigCallback(prepareSshEnvironment(auth))
+        }
+
+        cmd.call()
         git.close()
     }
 
-    // --- 分支与标签 ---
+    // --- 辅助方法 ---
     suspend fun createBranch(name: String, checkout: Boolean = true) = withContext(Dispatchers.IO) {
         val git = Git.open(rootDir)
         git.branchCreate().setName(name).call()
@@ -156,7 +223,6 @@ class GitManager(private val projectPath: String) {
         git.tag().setName(name).setMessage(message).call()
         git.close()
     }
-
 
     suspend fun checkout(name: String) = withContext(Dispatchers.IO) {
         val git = Git.open(rootDir)
@@ -180,24 +246,20 @@ class GitManager(private val projectPath: String) {
         git.close()
     }
 
-    // --- 🔥 获取提交历史树 (带 Ref 信息) ---
     suspend fun getCommitLog(): Pair<List<RevCommit>, Map<String, List<GitRefUI>>> = withContext(Dispatchers.IO) {
         if (!isGitRepo()) return@withContext Pair(emptyList(), emptyMap())
         val git = Git.open(rootDir)
         val repo = git.repository
 
-        // 1. 获取所有 Ref (HEAD, branches, tags) 并建立 Hash -> RefList 的映射
         val refMap = mutableMapOf<String, MutableList<GitRefUI>>()
 
-        // 获取 HEAD
         val head = repo.resolve(Constants.HEAD)
         if (head != null) {
             val headId = head.name
             refMap.getOrPut(headId) { mutableListOf() }.add(GitRefUI("HEAD", RefType.HEAD))
         }
 
-        // 获取所有引用
-        repo.refDatabase.getRefs().forEach { ref ->
+        repo.refDatabase.refs.forEach { ref ->
             val id = ref.objectId.name
             val name = ref.name
             val simpleName = RepositoryUtils.shortenRefName(name)
@@ -209,20 +271,18 @@ class GitManager(private val projectPath: String) {
                 else -> RefType.LOCAL_BRANCH
             }
 
-            // 如果不是单纯的 HEAD 指针，才添加
             if (name != Constants.HEAD) {
                 refMap.getOrPut(id) { mutableListOf() }.add(GitRefUI(simpleName, type))
             }
         }
 
-        // 2. 遍历 Commit
         val walk = RevWalk(repo)
-        val allRefs = repo.refDatabase.getRefs()
+        val allRefs = repo.refDatabase.refs
         allRefs.forEach { ref ->
             if (ref.objectId != null) {
                 try {
                     walk.markStart(walk.parseCommit(ref.objectId))
-                } catch (e: Exception) { /* ignore */ }
+                } catch (_: Exception) { /* ignore */ }
             }
         }
         walk.sort(org.eclipse.jgit.revwalk.RevSort.COMMIT_TIME_DESC)
@@ -240,7 +300,7 @@ class GitManager(private val projectPath: String) {
     }
 }
 
-// 辅助工具类
+// 🔥🔥 修复点：补回了 RepositoryUtils 对象 🔥🔥
 object RepositoryUtils {
     fun shortenRefName(refName: String): String {
         if (refName.startsWith(Constants.R_HEADS)) return refName.substring(Constants.R_HEADS.length)

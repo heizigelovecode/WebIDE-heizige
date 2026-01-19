@@ -181,6 +181,7 @@ dependencies {
     implementation(libs.org.eclipse.jgit)
     // Source: https://mvnrepository.com/artifact/org.eclipse.jgit/org.eclipse.jgit.ssh.apache
     implementation(libs.org.eclipse.jgit.ssh.apache)
+    implementation("org.slf4j:slf4j-simple:2.0.17")
 
     // 🔥🔥🔥添加终端依赖
     implementation(project(":core:main"))

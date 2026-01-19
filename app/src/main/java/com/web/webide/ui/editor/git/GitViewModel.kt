@@ -10,7 +10,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import org.eclipse.jgit.revwalk.RevCommit
-import java.util.LinkedList
 import androidx.core.content.edit
 
 class GitViewModel(application: Application) : AndroidViewModel(application) {
@@ -22,22 +21,17 @@ class GitViewModel(application: Application) : AndroidViewModel(application) {
     var isLoading by mutableStateOf(false)
     var statusMessage by mutableStateOf<String?>(null)
 
-    var savedAuth by mutableStateOf<GitAuth?>(null)
+    // 🔥 配置相关
     var remoteUrl by mutableStateOf("")
     var userEmail by mutableStateOf("")
+    var savedAuth by mutableStateOf<GitAuth?>(null)
 
     private var gitManager: GitManager? = null
 
-    // IDEA 风格配色
     private val laneColors = listOf(
-        Color(0xFFFF5252), // Red
-        Color(0xFF40C4FF), // Light Blue
-        Color(0xFFE040FB), // Purple
-        Color(0xFF69F0AE), // Green
-        Color(0xFFFFAB40), // Orange
-        Color(0xFFFFD740), // Yellow
-        Color(0xFF9E9E9E), // Grey
-        Color(0xFF795548)  // Brown
+        Color(0xFFFF5252), Color(0xFF40C4FF), Color(0xFFE040FB),
+        Color(0xFF69F0AE), Color(0xFFFFAB40), Color(0xFFFFD740),
+        Color(0xFF9E9E9E), Color(0xFF795548)
     )
 
     fun initialize(projectPath: String) {
@@ -49,23 +43,53 @@ class GitViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadConfig() {
         val context = getApplication<Application>()
         val prefs = context.getSharedPreferences("git_config", Context.MODE_PRIVATE)
+
         remoteUrl = prefs.getString("remote_url", "") ?: ""
-        val user = prefs.getString("username", "") ?: ""
-        val token = prefs.getString("token", "") ?: ""
         userEmail = prefs.getString("user_email", "") ?: ""
-        if (user.isNotEmpty() && token.isNotEmpty()) savedAuth = GitAuth(user, token)
+
+        // 读取认证信息
+        val authTypeStr = prefs.getString("auth_type", "HTTPS") ?: "HTTPS"
+        val username = prefs.getString("username", "") ?: ""
+        val token = prefs.getString("token", "") ?: ""
+        val privateKey = prefs.getString("private_key", "") ?: ""
+        val passphrase = prefs.getString("passphrase", "") ?: ""
+
+        val authType = if (authTypeStr == "SSH") AuthType.SSH else AuthType.HTTPS
+
+        savedAuth = GitAuth(
+            type = authType,
+            username = username,
+            token = token,
+            privateKey = privateKey,
+            passphrase = passphrase
+        )
     }
 
-    fun saveConfig(remote: String, username: String, token: String, email: String) {
+    fun saveConfig(
+        remote: String,
+        email: String,
+        authType: AuthType,
+        username: String,
+        token: String,
+        privateKey: String,
+        passphrase: String
+    ) {
         viewModelScope.launch {
             gitManager?.addRemote("origin", remote)
             remoteUrl = remote
             userEmail = email
-            savedAuth = GitAuth(username, token)
+
+            savedAuth = GitAuth(authType, username, token, privateKey, passphrase)
+
             val prefs = getApplication<Application>().getSharedPreferences("git_config", Context.MODE_PRIVATE)
             prefs.edit {
-                putString("remote_url", remote).putString("username", username)
-                    .putString("token", token).putString("user_email", email)
+                putString("remote_url", remote)
+                putString("user_email", email)
+                putString("auth_type", authType.name)
+                putString("username", username)
+                putString("token", token)
+                putString("private_key", privateKey)
+                putString("passphrase", passphrase)
             }
             statusMessage = "配置已保存"
         }
@@ -90,20 +114,12 @@ class GitViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * 🔥 核心修复：拓扑轨道计算算法
-     * 修复了 'No value passed for parameter email/parents' 错误
-     */
     private fun calculateGraph(
         commits: List<RevCommit>,
         refMap: Map<String, List<GitRefUI>>
     ): List<GitCommitUI> {
         val result = mutableListOf<GitCommitUI>()
-
-        // Slots: 存储当前每个轨道对应的 "下一个需要的 Commit Hash"
         val slots = ArrayList<String?>()
-
-        // 颜色缓存：Hash -> ColorIndex
         val colorMap = HashMap<String, Int>()
         var nextColorIndex = 0
 
@@ -111,9 +127,7 @@ class GitViewModel(application: Application) : AndroidViewModel(application) {
             val hash = commit.name
             val parents = commit.parents.map { it.name }
 
-            // 1. 查找我在哪个轨道
             var myLane = slots.indexOf(hash)
-
             if (myLane == -1) {
                 myLane = slots.indexOf(null)
                 if (myLane == -1) {
@@ -124,7 +138,6 @@ class GitViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            // 2. 确定颜色
             var myColorIdx = colorMap[hash]
             if (myColorIdx == null) {
                 myColorIdx = nextColorIndex++
@@ -132,17 +145,13 @@ class GitViewModel(application: Application) : AndroidViewModel(application) {
             }
             val myColor = laneColors[myColorIdx % laneColors.size]
 
-            // 3. 处理父节点
             val parentLanes = mutableListOf<Int>()
-
             if (parents.isNotEmpty()) {
-                // 第一个父节点继承
                 val firstParent = parents[0]
                 slots[myLane] = firstParent
                 parentLanes.add(myLane)
                 colorMap[firstParent] = myColorIdx
 
-                // 其他父节点
                 for (i in 1 until parents.size) {
                     val otherParent = parents[i]
                     var otherLane = slots.indexOf(otherParent)
@@ -163,22 +172,18 @@ class GitViewModel(application: Application) : AndroidViewModel(application) {
                 slots[myLane] = null
             }
 
-            while (slots.isNotEmpty() && slots.last() == null) {
-                slots.removeAt(slots.lastIndex)
-            }
+            while (slots.isNotEmpty() && slots.last() == null) slots.removeAt(slots.lastIndex)
 
-            // 🔥 这里修复了之前的编译错误，传入了 email 和 parents
             result.add(GitCommitUI(
                 hash = hash,
                 shortHash = hash.substring(0, 7),
                 message = commit.shortMessage.trim(),
                 fullMessage = commit.fullMessage.trim(),
                 author = commit.authorIdent.name,
-                email = commit.authorIdent.emailAddress ?: "", // 🔥 传入 email
+                email = commit.authorIdent.emailAddress ?: "",
                 time = commit.commitTime * 1000L,
-                parents = parents, // 🔥 传入 parents
+                parents = parents,
                 refs = refMap[hash] ?: emptyList(),
-
                 lane = myLane,
                 totalLanes = slots.size,
                 childLanes = emptyList(),
@@ -186,12 +191,10 @@ class GitViewModel(application: Application) : AndroidViewModel(application) {
                 color = myColor
             ))
         }
-
         return result
     }
 
     // --- Git 操作 ---
-
     fun initRepo() { viewModelScope.launch { gitManager?.initRepo(); refreshAll() } }
 
     fun commit(msg: String, pushAfter: Boolean) {
@@ -275,8 +278,6 @@ class GitViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 获取分支列表 (返回类型兼容 GitManager 的最新修改)
     suspend fun getBranches() = gitManager?.getBranches() ?: emptyList()
-
     fun clearMessage() { statusMessage = null }
 }

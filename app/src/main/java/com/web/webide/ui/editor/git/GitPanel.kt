@@ -5,9 +5,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CallSplit
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 
+// 🔥🔥🔥 修复点：补回这个枚举，CodeEditScreen 需要它 🔥🔥🔥
 enum class SidebarTab { FILES, GIT }
 
 @Composable
@@ -37,12 +41,8 @@ fun GitPanel(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("变更", "历史")
 
-    // Dialog States
     var showConfigDialog by remember { mutableStateOf(false) }
-    var showBranchDialog by remember { mutableStateOf(false) } // 这个现在是主入口
-
-    // 这些 Dialog 现在由 BranchListDialog 内部触发，但状态可以在这里提升，或者在内部管理
-    // 为了简化，我们把新建分支的 Dialog 放在 BranchListDialog 上层覆盖
+    var showBranchDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(projectPath) { viewModel.initialize(projectPath) }
     LaunchedEffect(viewModel.statusMessage) {
@@ -66,7 +66,7 @@ fun GitPanel(
                 )
 
                 if (viewModel.isGitProject) {
-                    TabRow(
+                    SecondaryTabRow(
                         selectedTabIndex = selectedTabIndex,
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.primary,
@@ -102,14 +102,7 @@ fun GitPanel(
     }
 
     if (showConfigDialog) ConfigDialog(viewModel) { showConfigDialog = false }
-
-    // 🔥 分支管理弹窗 (核心修改)
-    if (showBranchDialog) {
-        BranchListDialog(
-            viewModel = viewModel,
-            onDismiss = { showBranchDialog = false }
-        )
-    }
+    if (showBranchDialog) BranchListDialog(viewModel) { showBranchDialog = false }
 }
 
 @Composable
@@ -129,7 +122,6 @@ fun GitToolbarCompact(
             .padding(horizontal = 8.dp)
             .background(MaterialTheme.colorScheme.surface)
     ) {
-        // 分支名称 (点击打开分支管理)
         AssistChip(
             onClick = onBranchClick,
             label = {
@@ -140,7 +132,7 @@ fun GitToolbarCompact(
                     style = MaterialTheme.typography.labelMedium
                 )
             },
-            leadingIcon = { Icon(Icons.Default.CallSplit, null, Modifier.size(14.dp)) },
+            leadingIcon = { Icon(Icons.AutoMirrored.Filled.CallSplit, null, Modifier.size(14.dp)) },
             modifier = Modifier.weight(1f).height(32.dp),
             shape = RoundedCornerShape(8.dp)
         )
@@ -179,9 +171,6 @@ fun GitToolbarCompact(
         }
     }
 }
-
-// ... GitChangesPageCompact, GitFileItemCompact, EmptyGitState, ConfigDialog 保持不变 ...
-// ... 请直接保留之前的代码 ...
 
 @Composable
 fun GitChangesPageCompact(viewModel: GitViewModel) {
@@ -293,42 +282,116 @@ fun EmptyGitState(onInit: () -> Unit) {
 @Composable
 fun ConfigDialog(viewModel: GitViewModel, onDismiss: () -> Unit) {
     var remote by remember { mutableStateOf(viewModel.remoteUrl) }
-    var user by remember { mutableStateOf(viewModel.savedAuth?.username ?: "") }
-    var token by remember { mutableStateOf(viewModel.savedAuth?.token ?: "") }
     var email by remember { mutableStateOf(viewModel.userEmail) }
+
+    // Auth 状态
+    val currentAuth = viewModel.savedAuth
+    var authType by remember { mutableStateOf(currentAuth?.type ?: AuthType.HTTPS) }
+
+    var username by remember { mutableStateOf(currentAuth?.username ?: "") }
+    var token by remember { mutableStateOf(currentAuth?.token ?: "") }
+    var privateKey by remember { mutableStateOf(currentAuth?.privateKey ?: "") }
+    var passphrase by remember { mutableStateOf(currentAuth?.passphrase ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("配置远程 & 身份") },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(remote, { remote = it }, label = { Text("Remote URL") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(user, { user = it }, label = { Text("Username") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(token, { token = it }, label = { Text("Token") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(email, { email = it }, label = { Text("Email (for Commit)") }, modifier = Modifier.fillMaxWidth())
-        }},
-        confirmButton = { Button(onClick = { viewModel.saveConfig(remote, user, token, email); onDismiss() }) { Text("保存") } },
+        title = { Text("仓库配置") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = remote,
+                    onValueChange = { remote = it },
+                    label = { Text("Remote URL") },
+                    placeholder = { Text(if (authType == AuthType.SSH) "git@github.com:..." else "https://github.com/...") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email (Committer)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                HorizontalDivider()
+
+                Text("认证方式", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    FilterChip(
+                        selected = authType == AuthType.HTTPS,
+                        onClick = { authType = AuthType.HTTPS },
+                        label = { Text("HTTPS") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    FilterChip(
+                        selected = authType == AuthType.SSH,
+                        onClick = { authType = AuthType.SSH },
+                        label = { Text("SSH Key") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (authType == AuthType.HTTPS) {
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        label = { Text("Username") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = token,
+                        onValueChange = { token = it },
+                        label = { Text("Token / Password") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = privateKey,
+                        onValueChange = { privateKey = it },
+                        label = { Text("Private Key (PEM/OpenSSH)") },
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        placeholder = { Text("-----BEGIN OPENSSH PRIVATE KEY-----...") }
+                    )
+                    OutlinedTextField(
+                        value = passphrase,
+                        onValueChange = { passphrase = it },
+                        label = { Text("Passphrase (选填)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                viewModel.saveConfig(remote, email, authType, username, token, privateKey, passphrase)
+                onDismiss()
+            }) { Text("保存配置") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }
 
-// 🔥🔥🔥 核心修改：美化版分支管理弹窗 🔥🔥🔥
 @Composable
 fun BranchListDialog(viewModel: GitViewModel, onDismiss: () -> Unit) {
     var branches by remember { mutableStateOf(emptyList<GitBranch>()) }
     var showNewBranchInput by remember { mutableStateOf(false) }
     var showNewTagInput by remember { mutableStateOf(false) }
 
-    // 加载分支列表
     LaunchedEffect(Unit) { branches = viewModel.getBranches() }
 
-    // 如果正在新建，显示新建弹窗 (覆盖在上面)
     if (showNewBranchInput) {
         NewBranchDialog(viewModel) {
             showNewBranchInput = false
-            // 刷新列表（简单点可以直接关闭弹窗，让用户重进查看效果）
             onDismiss()
         }
-        return // 提前返回，不显示列表
+        return
     }
 
     if (showNewTagInput) {
@@ -343,14 +406,13 @@ fun BranchListDialog(viewModel: GitViewModel, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.CallSplit, null, modifier = Modifier.size(20.dp))
+                Icon(Icons.AutoMirrored.Filled.CallSplit, null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("分支管理")
             }
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // 1. 操作区域
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -370,61 +432,39 @@ fun BranchListDialog(viewModel: GitViewModel, onDismiss: () -> Unit) {
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp)
                     ) {
-                        Icon(Icons.Default.Label, null, Modifier.size(16.dp))
+                        Icon(Icons.AutoMirrored.Filled.Label, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("新建标签")
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
-
                 HorizontalDivider()
 
-                // 2. 分支列表
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 300.dp) // 限制高度
-                ) {
-                    // 分组：Local Branches
+                LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
                     val localBranches = branches.filter { it.type == BranchType.LOCAL }
                     if (localBranches.isNotEmpty()) {
                         item {
-                            Text(
-                                "Local Branches",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
-                            )
+                            Text("Local Branches", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
                         }
                         items(localBranches) { b -> BranchItem(b, viewModel, onDismiss) }
                     }
 
-                    // 分组：Remote Branches
                     val remoteBranches = branches.filter { it.type == BranchType.REMOTE }
                     if (remoteBranches.isNotEmpty()) {
                         item {
-                            Text(
-                                "Remote Branches",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
-                            )
+                            Text("Remote Branches", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
                         }
                         items(remoteBranches) { b -> BranchItem(b, viewModel, onDismiss) }
                     }
 
                     if (localBranches.isEmpty() && remoteBranches.isEmpty()) {
-                        item {
-                            Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                                Text("No branches found", color = Color.Gray)
-                            }
-                        }
+                        item { Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) { Text("No branches found", color = Color.Gray) } }
                     }
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
-        }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
     )
 }
 
@@ -447,16 +487,13 @@ fun BranchItem(branch: GitBranch, viewModel: GitViewModel, onDismiss: () -> Unit
             .padding(horizontal = 8.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 图标
         Icon(
             imageVector = if (branch.type == BranchType.LOCAL) Icons.Default.Computer else Icons.Default.Cloud,
             contentDescription = null,
             tint = if (isCurrent) MaterialTheme.colorScheme.primary else Color.Gray,
             modifier = Modifier.size(18.dp)
         )
-
         Spacer(Modifier.width(12.dp))
-
         Text(
             text = branch.name,
             style = MaterialTheme.typography.bodyMedium,
@@ -466,7 +503,6 @@ fun BranchItem(branch: GitBranch, viewModel: GitViewModel, onDismiss: () -> Unit
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-
         if (isCurrent) {
             Icon(Icons.Default.Check, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
         }
@@ -493,10 +529,7 @@ fun NewBranchDialog(viewModel: GitViewModel, onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            Button(
-                onClick = { viewModel.createBranch(name); onDismiss() },
-                enabled = name.isNotBlank()
-            ) { Text("创建并切换") }
+            Button(onClick = { viewModel.createBranch(name); onDismiss() }, enabled = name.isNotBlank()) { Text("创建并切换") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
@@ -514,10 +547,7 @@ fun NewTagDialog(viewModel: GitViewModel, onDismiss: () -> Unit) {
             OutlinedTextField(msg, { msg = it }, label = { Text("说明") }, modifier = Modifier.fillMaxWidth())
         }},
         confirmButton = {
-            Button(
-                onClick = { viewModel.createTag(name, msg); onDismiss() },
-                enabled = name.isNotBlank()
-            ) { Text("创建") }
+            Button(onClick = { viewModel.createTag(name, msg); onDismiss() }, enabled = name.isNotBlank()) { Text("创建") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )

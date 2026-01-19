@@ -25,7 +25,7 @@ data class GitCommitUI(
 data class GitRefUI(val name: String, val type: RefType)
 enum class RefType { HEAD, LOCAL_BRANCH, REMOTE_BRANCH, TAG }
 
-// 🔥 新增：分支数据模型
+// 分支数据模型
 data class GitBranch(
     val name: String,        // 显示名称 (如 main, origin/main)
     val fullRef: String,     // 完整引用 (refs/heads/main)
@@ -36,5 +36,16 @@ data class GitBranch(
 enum class BranchType { LOCAL, REMOTE }
 
 data class GitFileChange(val filePath: String, val status: GitFileStatus)
-data class GitAuth(val username: String, val token: String)
+
+// 🔥 修改：增强认证模型，支持 HTTPS 和 SSH
+data class GitAuth(
+    val type: AuthType = AuthType.HTTPS,
+    val username: String = "",
+    val token: String = "",       // HTTPS: 密码/Token
+    val privateKey: String = "",  // SSH: 私钥内容
+    val passphrase: String = ""   // SSH: 私钥密码 (可选)
+)
+
+enum class AuthType { HTTPS, SSH }
+
 enum class GitFileStatus { ADDED, MODIFIED, UNTRACKED, MISSING, REMOVED, CONFLICTING }
