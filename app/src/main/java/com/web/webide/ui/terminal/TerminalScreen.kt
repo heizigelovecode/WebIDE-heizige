@@ -38,6 +38,9 @@ import com.web.webide.ui.terminal.TerminalConfig.VIRTUAL_KEYS_JSON
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+// 🔥 全局 VirtualKeysView 引用，用于 TerminalBackEnd 读取 Ctrl/Alt 按键状态
+var virtualKeysView: WeakReference<VirtualKeysView>? = null
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalScreen(navController: NavController) {
@@ -235,6 +238,12 @@ fun TerminalScreen(navController: NavController) {
                             AndroidView(
                                 factory = { ctx ->
                                     VirtualKeysView(ctx, null).apply {
+                                        // 🔥 设置全局引用
+                                        virtualKeysView = WeakReference(this)
+
+                                        // 🔥 使用 TerminalSession 而不是 TerminalView
+                                        virtualKeysViewClient = currentSession?.let { VirtualKeysListener(it) }
+
                                         setButtonTextAllCaps(true)
                                         reload(
                                             VirtualKeysInfo(
@@ -253,9 +262,6 @@ fun TerminalScreen(navController: NavController) {
                                         0x00000000,
                                         0xFF7F7F7F.toInt()
                                     )
-                                    terminalViewRef?.get()?.let {
-                                        view.virtualKeysViewClient = VirtualKeysListener(it)
-                                    }
                                 }
                             )
                         }
@@ -277,7 +283,14 @@ fun TerminalScreen(navController: NavController) {
                                             background = null; hint = "Type command..."
                                             setHintTextColor(if (isSystemDark) 0xFF888888.toInt() else 0xFFAAAAAA.toInt())
                                             setTextColor(if (isSystemDark) 0xFFFFFFFF.toInt() else 0xFF000000.toInt())
-                                            doOnTextChanged { t, _, _, _ -> text = t.toString() }
+                                            doOnTextChanged { t, _, _, _ ->
+                                                val inputChar = t.toString()
+                                                if (inputChar.isNotEmpty()) {
+                                                    val session = SessionManager.currentSession
+                                                    session?.write(inputChar)
+                                                }
+                                                text = "" // 清空输入框，准备下一次输入
+                                            }
                                             setOnEditorActionListener { _, actionId, _ ->
                                                 if (actionId == EditorInfo.IME_ACTION_DONE) {
                                                     val term = terminalViewRef?.get()
