@@ -21,8 +21,45 @@
 #-renamesourcefileattribute SourceFile
 
 
+# ---------------------------------------------------------
+# Apache SSHD & JGit - R8 Fixes (Round 2)
+# ---------------------------------------------------------
 
+# 1. Missing java.rmi.** (Remote Method Invocation)
+# Android does not support Java RMI. SSHD uses this for some exception handling
+# but it is not critical for basic SSH client usage.
+-dontwarn java.rmi.**
 
+# 2. Missing net.i2p.crypto.eddsa.**
+# Apache SSHD supports EdDSA (Ed25519) keys. It looks for this specific library.
+# Since you likely use BouncyCastle (included with JGit/Android) or don't use this specific
+# implementation, we tell R8 to ignore it.
+-dontwarn net.i2p.crypto.eddsa.**
+
+# 3. Missing org.apache.tomcat.jni.** (Apache Portable Runtime)
+# SSHD uses this for Unix Domain Socket support (ssh-agent) on Linux/Unix desktops.
+# This native bridge does not exist on Android.
+-dontwarn org.apache.tomcat.jni.**
+
+# ---------------------------------------------------------
+# Previous Rules (Keep these to prevent Runtime Crashes)
+# ---------------------------------------------------------
+
+# JGit / SSHD / SLF4J
+-dontwarn java.lang.management.**
+-dontwarn javax.management.**
+-dontwarn org.ietf.jgss.**
+-dontwarn javax.security.auth.login.**
+-dontwarn javax.security.auth.callback.**
+-dontwarn java.lang.ProcessHandle
+-dontwarn com.google.re2j.**
+
+# Prevent R8 from stripping code that is accessed via reflection
+-keep class org.eclipse.jgit.** { *; }
+-keep class org.apache.sshd.** { *; }
+-keep interface org.apache.sshd.** { *; }
+-keep class org.slf4j.** { *; }
+-keep class com.jcraft.jsch.** { *; }
 # -------------------------------------------------------------------------
 # R8 error seen during release build:
 #   Missing class io.github.rosemoe.oniguruma.OnigNative
