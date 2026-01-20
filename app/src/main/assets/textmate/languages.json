@@ -17,6 +17,12 @@
       "languageConfiguration": "textmate/javascript/language-configuration.json"
     },
     {
+      "grammar": "textmate/c/syntaxes/c.tmLanguage.json",
+      "name": "c",
+      "scopeName": "source.c",
+      "languageConfiguration": "textmate/c/language-configuration.json"
+    },
+    {
      "grammar": "textmate/css/syntaxes/css.tmLanguage.json",
       "name": "css",
       "scopeName": "source.css",

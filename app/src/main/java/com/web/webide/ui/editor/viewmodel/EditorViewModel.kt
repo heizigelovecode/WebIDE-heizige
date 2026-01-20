@@ -308,6 +308,7 @@ class EditorViewModel : ViewModel() {
                 "html", "htm" -> "text.html.basic"
                 "css" -> "source.css"
                 "js", "javascript" -> "source.js"
+                "glsl" -> "source.c"
                 else -> return null
             }
             val prefs = context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE)
