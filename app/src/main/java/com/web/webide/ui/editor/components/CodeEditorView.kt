@@ -44,6 +44,7 @@ import com.web.webide.ui.ThemeViewModel
 import com.web.webide.ui.ThemeViewModelFactory
 import com.web.webide.ui.editor.viewmodel.CodeEditorState
 import com.web.webide.ui.editor.viewmodel.EditorViewModel
+import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme
 import io.github.rosemoe.sora.langs.textmate.registry.FileProviderRegistry
 import io.github.rosemoe.sora.langs.textmate.registry.GrammarRegistry
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry
@@ -54,6 +55,10 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.launch
 import org.eclipse.tm4e.core.registry.IThemeSource
 import java.io.File
+
+// 定义主题名称常量
+private const val THEME_LIGHT = "quietlight" // 浅色主题文件名 (assets/textmate/quietlight.json)
+private const val THEME_DARK = "darcula"     // 深色主题文件名 (assets/textmate/darcula.json)
 
 @Composable
 fun CodeEditorView(
@@ -66,7 +71,6 @@ fun CodeEditorView(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                // 重新加载配置，确保读取到设置页面的更改
                 viewModel.reloadEditorConfig(context)
             }
         }
@@ -79,8 +83,7 @@ fun CodeEditorView(
 
     val editorConfig = viewModel.editorConfig
 
-    // === 字体加载逻辑优化 ===
-    // 优先尝试加载外部文件，如果不存在则加载 assets，最后回退到默认
+    // === 字体加载逻辑 ===
     val editorTypeface = remember(editorConfig.fontPath) {
         if (editorConfig.fontPath.isBlank()) {
             Typeface.MONOSPACE
@@ -88,10 +91,8 @@ fun CodeEditorView(
             try {
                 val file = File(editorConfig.fontPath)
                 if (file.exists() && file.isFile && file.canRead()) {
-                    // 1. 尝试从绝对路径加载
                     Typeface.createFromFile(file)
                 } else {
-                    // 2. 尝试从 Assets 加载
                     Typeface.createFromAsset(context.assets, editorConfig.fontPath)
                 }
             } catch (e: Exception) {
@@ -112,24 +113,42 @@ fun CodeEditorView(
     }
     val seedColor = if (themeState.isCustomTheme) themeState.customColor else MaterialTheme.colorScheme.primary
 
-    LaunchedEffect(seedColor, isDark, isEditorReady) {
-        if (isEditorReady) viewModel.updateEditorTheme(seedColor, isDark)
-    }
-
     val editor = remember(state.file.absolutePath) { viewModel.getOrCreateEditor(context, state) }
 
-    LaunchedEffect(state.file.absolutePath) {
+    // 初始化 TextMate
+    LaunchedEffect(Unit) {
         if (!TextMateInitializer.isReady()) {
             TextMateInitializer.initialize(context) {
                 isEditorReady = true
-                viewModel.updateEditorTheme(seedColor, isDark)
             }
         } else {
             isEditorReady = true
-            viewModel.updateEditorTheme(seedColor, isDark)
         }
     }
 
+    // 🔥 核心逻辑：监听深色模式变化，切换高亮主题 🔥
+    LaunchedEffect(seedColor, isDark, isEditorReady) {
+        if (isEditorReady) {
+            try {
+                // 1. 切换 TextMate 的基础语法高亮主题
+                val targetTheme = if (isDark) THEME_DARK else THEME_LIGHT
+                ThemeRegistry.getInstance().setTheme(targetTheme)
+
+                // 2. 重新创建配色方案应用到编辑器 (这会加载新的高亮颜色)
+                val newScheme = TextMateColorScheme.create(ThemeRegistry.getInstance())
+                editor.colorScheme = newScheme
+
+                // 3. 再次调用 ViewModel 更新 UI 颜色 (行号、背景色等，使其匹配 App 的 Material 主题)
+                // 注意：EditorColorSchemeManager 会覆盖掉 TextMate 主题里的背景色，这正是我们想要的
+                viewModel.updateEditorTheme(seedColor, isDark)
+
+                // 强制重绘
+                editor.invalidate()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -143,18 +162,11 @@ fun CodeEditorView(
                 },
                 modifier = Modifier.fillMaxSize(),
                 update = { view ->
-                    //斜向滑动
-                    view.getProps().singleDirectionDragging = false
-
-                    // 应用字体
+                    view.props.singleDirectionDragging = false
                     view.typefaceText = editorTypeface
                     view.typefaceLineNumber = editorTypeface
-
-                    // 其他配置
                     view.isWordwrap = editorConfig.wordWrap
                     view.tabWidth = editorConfig.tabWidth
-
-                    //代码折叠
                     view.setFoldingEnabled(editorConfig.codeFolding)
 
                     if (editorConfig.showInvisibles) {
@@ -225,21 +237,31 @@ object TextMateInitializer {
                 val appContext = context.applicationContext
                 val assetsFileResolver = AssetsFileResolver(appContext.assets)
                 FileProviderRegistry.getInstance().addFileProvider(assetsFileResolver)
-
                 val themeRegistry = ThemeRegistry.getInstance()
-                val themeName = "quietlight"
-                val themePath = "textmate/$themeName.json"
 
-                FileProviderRegistry.getInstance().tryGetInputStream(themePath)?.use { inputStream ->
-                    themeRegistry.loadTheme(
-                        ThemeModel(
-                            IThemeSource.fromInputStream(inputStream, themePath, null),
-                            themeName
-                        )
-                    )
-                    themeRegistry.setTheme(themeName)
+                // 🔥 修改：加载深色和浅色两个主题 🔥
+                // 确保你的 assets/textmate/ 目录下有这两个文件
+                val themes = mapOf(
+                    THEME_LIGHT to "textmate/$THEME_LIGHT.json",
+                    THEME_DARK to "textmate/$THEME_DARK.json"
+                )
+
+                themes.forEach { (name, path) ->
+                    try {
+                        FileProviderRegistry.getInstance().tryGetInputStream(path)?.use { inputStream ->
+                            themeRegistry.loadTheme(
+                                ThemeModel(
+                                    IThemeSource.fromInputStream(inputStream, path, null),
+                                    name
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
 
+                // 加载语法定义
                 GrammarRegistry.getInstance().loadGrammars("textmate/languages.json")
 
                 synchronized(this) {
@@ -259,5 +281,4 @@ object TextMateInitializer {
     }
 
     fun isReady() = isInitialized
-
 }
