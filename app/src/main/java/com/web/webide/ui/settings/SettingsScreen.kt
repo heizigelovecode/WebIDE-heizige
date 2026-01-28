@@ -62,6 +62,15 @@ import com.web.webide.ui.components.DirectorySelector
 import com.web.webide.ui.welcome.ColorPickerDialog
 import com.web.webide.ui.welcome.themeColors
 
+// 自动保存选项枚举
+enum class AutoSaveOption(val label: String, val interval: Long) {
+    OFF("关闭", 0L),
+    SEC_30("每 30 秒", 30_000L),
+    MIN_1("每 1 分钟", 60_000L),
+    MIN_5("每 5 分钟", 300_000L),
+    MIN_10("每 10 分钟", 600_000L)
+}
+
 // 扩展函数解决 luminance 报错
 fun Color.luminance(): Float {
     return 0.2126f * this.red + 0.7152f * this.green + 0.0722f * this.blue
@@ -88,7 +97,11 @@ fun SettingsScreen(
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE) }
 
-    val fontSize = prefs.getFloat("editor_font_size", 14f)
+    val editorPrefs = remember { context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE) }
+    // 使用与 ViewModel 中加载自动保存设置一致的 SharedPreferences 文件名
+    val generalPrefs = remember { context.getSharedPreferences("WebIDE_Settings", Context.MODE_PRIVATE) }
+
+    val fontSize = editorPrefs.getFloat("editor_font_size", 14f)
 
     var tabWidth by remember { mutableIntStateOf(prefs.getInt("editor_tab_width", 4)) }
     var wordWrap by remember { mutableStateOf(prefs.getBoolean("editor_word_wrap", false)) }
@@ -98,7 +111,8 @@ fun SettingsScreen(
     var lspEnabled by remember { mutableStateOf(prefs.getBoolean("editor_lsp_enabled", false)) }
     var fontPath by remember { mutableStateOf(prefs.getString("editor_font_path", "") ?: "") }
     var customSymbols by remember { mutableStateOf(prefs.getString("editor_custom_symbols", "Tab,<,>,/,=,\",',!,?,;,:,{,},[,],(,),+,-,*,_,&,|") ?: "") }
-
+    var autoSaveInterval by remember { mutableLongStateOf(generalPrefs.getLong("auto_save_interval", 0L)) }
+    var showAutoSaveDialog by remember { mutableStateOf(false) }
     // 保存之前的 LSP 状态，用于检测变化
     var previousLspEnabled by remember { mutableStateOf(lspEnabled) }
 
@@ -187,7 +201,16 @@ fun SettingsScreen(
                     modifier = Modifier.padding(start = 4.dp, top = 8.dp)
                 )
             }
-
+            // 🔥 新增：自动保存设置入口
+            item {
+                val currentOption = AutoSaveOption.entries.find { it.interval == autoSaveInterval } ?: AutoSaveOption.OFF
+                SimpleSettingsCard(
+                    icon = Icons.Outlined.SaveAs, // 需要确保有此图标，如果没有可以使用 Icons.Default.Save
+                    title = "自动保存与备份",
+                    subtitle = if (currentOption == AutoSaveOption.OFF) "已关闭" else "频率: ${currentOption.label}",
+                    onClick = { showAutoSaveDialog = true }
+                )
+            }
             item {
                 SimpleSettingsCard(
                     icon = Icons.Outlined.Folder,
@@ -241,6 +264,51 @@ fun SettingsScreen(
                 Toast.makeText(context, "日志路径已更新", Toast.LENGTH_SHORT).show()
             },
             onDismissRequest = { showLogPathSelector = false }
+        )
+    }
+    if (showAutoSaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showAutoSaveDialog = false },
+            title = { Text("自动保存频率") },
+            text = {
+                Column {
+                    Text(
+                        "开启后，系统将定时保存所有打开的文件，并在后台将项目打包备份至私有目录（保留最近5份）。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    AutoSaveOption.entries.forEach { option ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    // 1. 更新状态
+                                    autoSaveInterval = option.interval
+                                    // 2. 写入 SharedPreferences
+                                    generalPrefs.edit { putLong("auto_save_interval", option.interval) }
+                                    // 3. 关闭弹窗
+                                    showAutoSaveDialog = false
+                                    // 4. 提示
+                                    val msg = if (option == AutoSaveOption.OFF) "自动保存已关闭" else "已设为 ${option.label} 自动保存"
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(vertical = 12.dp)
+                        ) {
+                            RadioButton(
+                                selected = (option.interval == autoSaveInterval),
+                                onClick = null // 点击 Row 触发
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(option.label, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAutoSaveDialog = false }) { Text("取消") }
+            }
         )
     }
 

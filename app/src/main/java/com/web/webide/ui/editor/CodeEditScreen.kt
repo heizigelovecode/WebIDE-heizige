@@ -60,6 +60,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.web.webide.build.ApkInstaller
 import com.web.webide.safeNavigate
 import com.web.webide.ui.editor.components.EditorPanelLayout
@@ -74,6 +77,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import com.web.webide.R
+import kotlinx.coroutines.isActive
 
 // 构建结果状态
 sealed class BuildResultState {
@@ -92,6 +96,33 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
     val projectPath = File(workspacePath, folderName).absolutePath
     val keyboardController = LocalSoftwareKeyboardController.current
     val snackbarHostState = remember { SnackbarHostState() }
+    // 1. 定义状态来持有自动保存的时间间隔
+    var autoSaveInterval by remember { mutableLongStateOf(0L) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    // 2. 监听生命周期：当从设置页返回时，重新读取 SharedPreferences
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val prefs = context.getSharedPreferences("WebIDE_Settings", Context.MODE_PRIVATE)
+                autoSaveInterval = prefs.getLong("auto_save_interval", 0L)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    LaunchedEffect(autoSaveInterval) {
+        // 只有当间隔大于 0 时才启动循环
+        if (autoSaveInterval > 0) {
+            while (isActive) {
+                delay(autoSaveInterval) // 等待设定的时间
+
+                // 执行自动保存 (使用我们在 ViewModel 中新加的方法)
+                viewModel.autoSaveProject(context, projectPath)
+            }
+        }
+    }
     val focusManager = LocalFocusManager.current
     // 🔥 进阶：自动检测该项目下是否存在已构建的 APK
     LaunchedEffect(projectPath) {
@@ -339,7 +370,7 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
                                             DropdownMenuItem(
                                                 text = {
                                                     Column {
-                                                        Text("安装上次生成的 APK")
+                                                        Text("安装上次构建的 APK")
                                                         Text(
                                                             text = "版本: ${viewModel.lastBuiltApk!!.name}",
                                                             style = MaterialTheme.typography.labelSmall,

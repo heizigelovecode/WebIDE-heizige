@@ -13,6 +13,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.itsaky.androidide.treesitter.TSLanguage
 import com.itsaky.androidide.treesitter.json.TSLanguageJson
+import com.web.webide.core.utils.BackupUtils
 import com.web.webide.core.utils.LogCatcher
 import com.web.webide.core.utils.PermissionManager
 import com.web.webide.ui.editor.EditorColorSchemeManager
@@ -615,7 +616,41 @@ class EditorViewModel : ViewModel() {
             try { editor.searcher.gotoNext() } catch (e: Exception) { LogCatcher.e("Search", "Next failed", e) }
         }
     }
+    suspend fun autoSaveProject(context: Context, projectPath: String) {
+        withContext(Dispatchers.IO) {
+            // 1. 检查是否有文件被修改
+            val modifiedFiles = openFiles.filter { it.isModified }
 
+            // 只有当有文件被修改，或者为了安全起见定期备份时才执行
+            // 这里策略是：只要开启自动保存，就保存修改的文件，并尝试备份
+
+            if (modifiedFiles.isNotEmpty()) {
+                if (!PermissionManager.hasRequiredPermissions(context)) return@withContext
+
+                modifiedFiles.forEach { state ->
+                    try {
+                        state.file.outputStream().use { output ->
+                            output.bufferedWriter(Charsets.UTF_8).use { writer ->
+                                writer.write(state.content)
+                            }
+                        }
+                        // 更新状态为已保存（UI层会自动移除 * 号）
+                        state.onContentSaved()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+                LogCatcher.d("AutoSave", "已自动保存 ${modifiedFiles.size} 个文件")
+            }
+
+            // 2. 执行备份 (BackupUtils 内部已经做了去重或覆盖逻辑，或者你可以加个判断只在文件变动时备份)
+            // 为了防止频繁备份导致卡顿，建议只在有文件被修改后才备份，或者你可以根据需求调整
+            if (modifiedFiles.isNotEmpty()) {
+                val backupResult = BackupUtils.backupProject(context, projectPath)
+                LogCatcher.d("AutoSave", "项目备份结果: $backupResult")
+            }
+        }
+    }
     fun searchPrev() {
         val editor = getActiveEditor() ?: return
         if (editor.searcher.hasQuery()) {
