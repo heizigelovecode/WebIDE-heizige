@@ -59,7 +59,7 @@ import com.web.webide.core.utils.ThemeState
 import com.web.webide.core.utils.WorkspaceManager
 import com.web.webide.safeNavigate
 import com.web.webide.ui.components.DirectorySelector
-import com.web.webide.ui.welcome.ColorPickerDialog
+import com.web.webide.ui.components.ColorPickerDialog
 import com.web.webide.ui.welcome.themeColors
 
 // 自动保存选项枚举

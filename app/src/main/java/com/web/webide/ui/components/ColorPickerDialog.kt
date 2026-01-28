@@ -17,7 +17,7 @@
  */
 
 
-package com.web.webide.ui.welcome
+package com.web.webide.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -40,6 +40,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -519,7 +520,7 @@ private fun RowScope.NumberInput(
 
 // --- 辅助函数 ---
 
-fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCheckerboard() {
+fun DrawScope.drawCheckerboard() {
     val size = 20f
     val rows = (this.size.height / size).toInt() + 1
     val cols = (this.size.width / size).toInt() + 1

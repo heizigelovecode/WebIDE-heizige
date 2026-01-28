@@ -46,6 +46,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.web.webide.core.utils.PermissionManager
 import com.web.webide.ui.ThemeViewModel
+import com.web.webide.ui.components.ColorPickerDialog
 import com.web.webide.ui.components.WebIDE_Icon
 import kotlinx.coroutines.launch
 

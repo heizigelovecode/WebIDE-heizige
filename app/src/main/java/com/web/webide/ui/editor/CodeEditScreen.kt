@@ -20,6 +20,8 @@
 package com.web.webide.ui.editor
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -71,8 +73,8 @@ import com.web.webide.ui.editor.components.JumpLinePanel
 import com.web.webide.ui.editor.components.SearchPanel
 import com.web.webide.ui.editor.git.GitPanel
 import com.web.webide.ui.editor.git.SidebarTab
-import com.web.webide.ui.welcome.ColorPickerDialog
-import com.web.webide.ui.welcome.colorToHex
+import com.web.webide.ui.components.ColorPickerDialog
+import com.web.webide.ui.components.colorToHex
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -593,8 +595,8 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
                 onColorSelected = { color ->
                     val hex = colorToHex(color, color.alpha < 1f)
                     viewModel.insertText(hex)
-                    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    val clipData = android.content.ClipData.newPlainText("Hex Color", hex)
+                    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clipData = ClipData.newPlainText("Hex Color", hex)
                     clipboardManager.setPrimaryClip(clipData)
                     showColorPicker = false
                 }
