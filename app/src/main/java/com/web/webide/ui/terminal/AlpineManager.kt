@@ -13,7 +13,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 object AlpineManager {
-
+    var currentProject: String? = null
     private fun getPrefixDir(context: Context): File = context.filesDir.parentFile!!
     private fun getLocalDir(context: Context): File = File(getPrefixDir(context), "local").apply { mkdirs() }
     private fun getBinDir(context: Context): File = File(getLocalDir(context), "bin").apply { mkdirs() }
@@ -160,6 +160,7 @@ object AlpineManager {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        val targetProjectPath = projectPath ?: currentProject ?: ""
         // 2. 环境变量 (宿主环境)
         val env = mutableListOf(
             "PATH=${System.getenv("PATH")}:/sbin:${binDir.absolutePath}",
@@ -177,7 +178,7 @@ object AlpineManager {
             "WEBIDE_VERSION_NAME=$versionName",
             "WEBIDE_VERSION_CODE=$versionCode",
             "WEBIDE_WORKSPACE=$workspacePath",
-            "WEBIDE_PROJECT_DIR=${projectPath ?: ""}"
+            "WEBIDE_PROJECT_DIR=$targetProjectPath"
         )
 
         // 注入 Loader

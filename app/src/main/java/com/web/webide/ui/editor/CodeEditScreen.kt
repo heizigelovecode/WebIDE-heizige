@@ -77,6 +77,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import com.web.webide.R
+import com.web.webide.ui.terminal.AlpineManager
 import kotlinx.coroutines.isActive
 
 // 构建结果状态
@@ -111,6 +112,11 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
+    }
+    LaunchedEffect(projectPath) {
+        viewModel.loadInitialFile(projectPath)
+        // 这样即使之后跳转终端不传参，AlpineManager 也能知道当前是在哪个项目
+        AlpineManager.currentProject = projectPath
     }
     LaunchedEffect(autoSaveInterval) {
         // 只有当间隔大于 0 时才启动循环
