@@ -200,7 +200,7 @@ fun GitChangesPageCompact(
     var message by remember { mutableStateOf("") }
     var pushAfter by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().imePadding()) {
         if (viewModel.remoteUrl.isEmpty()) {
             Card(
                 colors = CardDefaults.cardColors(MaterialTheme.colorScheme.errorContainer),
