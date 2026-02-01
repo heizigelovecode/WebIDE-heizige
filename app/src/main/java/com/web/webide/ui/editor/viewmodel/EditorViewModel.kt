@@ -90,6 +90,7 @@ class DiffEditorState(
     override val title: String = "${file.name} (Diff)"
     override val uniqueId: String = "diff_${file.absolutePath}_${UUID.randomUUID()}"
     var viewMode by mutableStateOf(DiffViewMode.SPLIT)
+    var isReadOnly by mutableStateOf(true)
 }
 
 data class CodeEditorState(

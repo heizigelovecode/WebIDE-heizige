@@ -18,11 +18,6 @@
 package com.web.webide.ui.editor.components
 
 import android.annotation.SuppressLint
-import android.graphics.Color as AndroidColor
-import android.text.Spannable
-import android.text.SpannableStringBuilder
-import android.text.style.BackgroundColorSpan
-import android.text.style.ForegroundColorSpan
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -30,6 +25,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,15 +34,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.graphics.luminance
 import com.web.webide.ui.editor.EditorColorSchemeManager
 import com.web.webide.ui.editor.viewmodel.DiffEditorState
 import com.web.webide.ui.editor.viewmodel.DiffViewMode
 import com.web.webide.ui.editor.viewmodel.EditorViewModel
 import io.github.rosemoe.sora.widget.CodeEditor
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
+import io.github.rosemoe.sora.lang.styling.HighlightTextContainer
+import io.github.rosemoe.sora.lang.styling.color.ResolvableColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import io.github.rosemoe.sora.event.SubscriptionReceipt
@@ -170,8 +170,10 @@ class ScrollSynchronizer {
 // 2. 数据结构
 // ==========================================
 data class AlignedDiffResult(
-    val leftContent: CharSequence,
-    val rightContent: CharSequence,
+    val leftContent: String,
+    val rightContent: String,
+    val leftHighlights: HighlightTextContainer,
+    val rightHighlights: HighlightTextContainer,
     val adds: Int,
     val deletes: Int
 )
@@ -187,11 +189,12 @@ fun DiffViewer(
     modifier: Modifier = Modifier
 ) {
     // 异步计算差异
+    // 强制在只读状态切换时重新计算，以修复因编辑导致的高亮偏移问题
     var diffData by remember(state.originalContent, state.currentContent) {
         mutableStateOf<AlignedDiffResult?>(null)
     }
 
-    LaunchedEffect(state.originalContent, state.currentContent) {
+    LaunchedEffect(state.originalContent, state.currentContent, state.isReadOnly) {
         withContext(Dispatchers.Default) {
             diffData = DiffAligner.align(state.originalContent, state.currentContent)
         }
@@ -208,9 +211,9 @@ fun DiffViewer(
         } else {
             val data = diffData!!
             if (state.viewMode == DiffViewMode.SPLIT) {
-                SplitDiffView(state, viewModel, data)
+                SplitDiffView(state, viewModel, data, state.isReadOnly)
             } else {
-                UnifiedDiffView(state, viewModel, data)
+                UnifiedDiffView(state, viewModel, data, state.isReadOnly)
             }
         }
     }
@@ -245,6 +248,17 @@ fun DiffToolbar(state: DiffEditorState, data: AlignedDiffResult?) {
                 Text("-$deleted", color = Color(0xFFEF5350), style = MaterialTheme.typography.labelSmall)
             }
             Spacer(Modifier.weight(1f))
+            
+            // Read-only Toggle
+            IconButton(onClick = { state.isReadOnly = !state.isReadOnly }) {
+                Icon(
+                    if (state.isReadOnly) Icons.Default.Lock else Icons.Default.Edit,
+                    contentDescription = if (state.isReadOnly) "Read Only" else "Editable",
+                    tint = if (state.isReadOnly) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
             IconButton(onClick = { state.viewMode = DiffViewMode.SPLIT }) {
                 Icon(
                     Icons.Default.ViewColumn, "Split",
@@ -265,7 +279,8 @@ fun DiffToolbar(state: DiffEditorState, data: AlignedDiffResult?) {
 fun SplitDiffView(
     state: DiffEditorState,
     viewModel: EditorViewModel,
-    data: AlignedDiffResult
+    data: AlignedDiffResult,
+    readOnly: Boolean
 ) {
     // 保持 Synchronizer 实例
     val synchronizer = remember { ScrollSynchronizer() }
@@ -292,8 +307,10 @@ fun SplitDiffView(
                 DiffHeader("HEAD", Color(0xFFD32F2F))
                 DiffEditorInstance(
                     content = data.leftContent,
+                    highlights = data.leftHighlights,
                     fileName = state.file.name,
                     viewModel = viewModel,
+                    readOnly = readOnly,
                     onEditorCreated = { leftEditorRef = it }
                 )
             }
@@ -302,8 +319,10 @@ fun SplitDiffView(
                 DiffHeader("Working", Color(0xFF388E3C))
                 DiffEditorInstance(
                     content = data.rightContent,
+                    highlights = data.rightHighlights,
                     fileName = state.file.name,
                     viewModel = viewModel,
+                    readOnly = readOnly,
                     onEditorCreated = { rightEditorRef = it }
                 )
             }
@@ -312,12 +331,14 @@ fun SplitDiffView(
 }
 
 @Composable
-fun UnifiedDiffView(state: DiffEditorState, viewModel: EditorViewModel, data: AlignedDiffResult) {
+fun UnifiedDiffView(state: DiffEditorState, viewModel: EditorViewModel, data: AlignedDiffResult, readOnly: Boolean) {
     Column(modifier = Modifier.fillMaxSize()) {
         DiffEditorInstance(
             content = data.rightContent,
+            highlights = data.rightHighlights,
             fileName = state.file.name,
             viewModel = viewModel,
+            readOnly = readOnly,
             onEditorCreated = {}
         )
     }
@@ -339,9 +360,11 @@ fun DiffHeader(text: String, color: Color) {
 
 @Composable
 fun DiffEditorInstance(
-    content: CharSequence,
+    content: String,
+    highlights: HighlightTextContainer,
     fileName: String,
     viewModel: EditorViewModel,
+    readOnly: Boolean,
     onEditorCreated: (CodeEditor) -> Unit
 ) {
     val editorConfig = viewModel.editorConfig
@@ -357,8 +380,9 @@ fun DiffEditorInstance(
                 )
 
                 // --- 基础 ---
-                isEditable = false
+                isEditable = !readOnly
                 isFocusable = true // 必须开启
+                isHighlightCurrentLine = true // 始终显示当前行高亮，即使在只读模式下
 
                 // --- 核心优化 ---
                 // 1. 关闭换行：保证每一行的“高度”绝对一致，防止左右行高错位
@@ -387,10 +411,19 @@ fun DiffEditorInstance(
             // 确保每次重组时都更新主题色，以响应系统主题变化
             EditorColorSchemeManager.applyThemeColors(editor.colorScheme, primaryColor, isDark)
 
+            if (editor.isEditable != !readOnly) {
+                editor.isEditable = !readOnly
+            }
+
             // 只有内容真变了才 Set，防止重置位置
-            if (editor.text.toString() != content.toString()) {
+            val contentChanged = editor.text.toString() != content
+            if (contentChanged) {
                 editor.setText(content)
-                // 强制刷新一次
+            }
+            
+            // 确保高亮始终同步，修复切换模式后的高亮偏移和丢失问题
+            if (contentChanged || editor.highlightTexts != highlights) {
+                editor.highlightTexts = highlights
                 editor.postInvalidate()
             }
         },
@@ -402,9 +435,31 @@ fun DiffEditorInstance(
 // 4. Diff 算法逻辑 (LCS + Padding)
 // ==========================================
 object DiffAligner {
-    private const val COLOR_DELETE_BG = 0x40B71C1C
-    private const val COLOR_ADD_BG = 0x401B5E20
     private const val PHANTOM_TEXT = " \n"
+
+    private data class DiffLine(
+        val text: String,
+        val type: LineType,
+        val originalText: String? = null
+    )
+
+    enum class LineType { NORMAL, ADD, DELETE, MODIFY }
+
+    private object AddColor : ResolvableColor {
+        override fun resolve(colorScheme: EditorColorScheme) = EditorColorSchemeManager.getDiffAddColor(colorScheme)
+    }
+
+    private object DeleteColor : ResolvableColor {
+        override fun resolve(colorScheme: EditorColorScheme) = EditorColorSchemeManager.getDiffDeleteColor(colorScheme)
+    }
+
+    private object AddWordColor : ResolvableColor {
+        override fun resolve(colorScheme: EditorColorScheme) = EditorColorSchemeManager.getDiffAddWordColor(colorScheme)
+    }
+
+    private object DeleteWordColor : ResolvableColor {
+        override fun resolve(colorScheme: EditorColorScheme) = EditorColorSchemeManager.getDiffDeleteWordColor(colorScheme)
+    }
 
     fun align(oldText: String, newText: String): AlignedDiffResult {
         val oldSafe = oldText.ifEmpty { "" }
@@ -427,66 +482,153 @@ object DiffAligner {
             }
         }
 
-        val leftBuilder = SpannableStringBuilder()
-        val rightBuilder = SpannableStringBuilder()
+        val leftStack = LinkedList<DiffLine>()
+        val rightStack = LinkedList<DiffLine>()
 
         var i = m
         var j = n
         var adds = 0
         var deletes = 0
 
-        val leftStack = LinkedList<CharSequence>()
-        val rightStack = LinkedList<CharSequence>()
-
         while (i > 0 || j > 0) {
             if (i > 0 && j > 0 && oldLines[i - 1] == newLines[j - 1]) {
-                leftStack.push(oldLines[i - 1] + "\n")
-                rightStack.push(newLines[j - 1] + "\n")
+                // Exact match
+                leftStack.push(DiffLine(oldLines[i - 1] + "\n", LineType.NORMAL))
+                rightStack.push(DiffLine(newLines[j - 1] + "\n", LineType.NORMAL))
+                i--
+                j--
+            } else if (i > 0 && j > 0 && isSimilar(oldLines[i - 1], newLines[j - 1])) {
+                // Similar -> Modify (Align them)
+                leftStack.push(DiffLine(oldLines[i - 1] + "\n", LineType.MODIFY, newLines[j - 1]))
+                rightStack.push(DiffLine(newLines[j - 1] + "\n", LineType.MODIFY, oldLines[i - 1]))
+                deletes++
+                adds++
                 i--
                 j--
             } else if (j > 0 && (i == 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-                leftStack.push(createPhantomLine())
-                rightStack.push(createColoredLine(newLines[j - 1] + "\n", COLOR_ADD_BG))
+                // Add (in Right) -> Phantom in Left
+                leftStack.push(DiffLine(PHANTOM_TEXT, LineType.NORMAL))
+                rightStack.push(DiffLine(newLines[j - 1] + "\n", LineType.ADD))
                 adds++
                 j--
             } else {
-                leftStack.push(createColoredLine(oldLines[i - 1] + "\n", COLOR_DELETE_BG))
-                rightStack.push(createPhantomLine())
+                // Delete (in Left) -> Phantom in Right
+                leftStack.push(DiffLine(oldLines[i - 1] + "\n", LineType.DELETE))
+                rightStack.push(DiffLine(PHANTOM_TEXT, LineType.NORMAL))
                 deletes++
                 i--
             }
         }
 
-        leftStack.forEach { leftBuilder.append(it) }
-        rightStack.forEach { rightBuilder.append(it) }
+        val leftBuilder = StringBuilder()
+        val rightBuilder = StringBuilder()
+        val leftContainer = HighlightTextContainer()
+        val rightContainer = HighlightTextContainer()
 
-        if (leftBuilder.isNotEmpty() && leftBuilder.last() == '\n') leftBuilder.delete(leftBuilder.length - 1, leftBuilder.length)
-        if (rightBuilder.isNotEmpty() && rightBuilder.last() == '\n') rightBuilder.delete(rightBuilder.length - 1, rightBuilder.length)
+        processStack(leftStack, leftBuilder, leftContainer, true)
+        processStack(rightStack, rightBuilder, rightContainer, false)
 
-        return AlignedDiffResult(leftBuilder, rightBuilder, adds, deletes)
+        // Trim last newline if necessary
+        if (leftBuilder.isNotEmpty() && leftBuilder.last() == '\n') leftBuilder.deleteCharAt(leftBuilder.length - 1)
+        if (rightBuilder.isNotEmpty() && rightBuilder.last() == '\n') rightBuilder.deleteCharAt(rightBuilder.length - 1)
+
+        return AlignedDiffResult(
+            leftBuilder.toString(),
+            rightBuilder.toString(),
+            leftContainer,
+            rightContainer,
+            adds,
+            deletes
+        )
     }
 
-    private fun createColoredLine(text: String, bgColor: Int): SpannableString {
-        val span = SpannableString(text)
-        span.setSpan(
-            BackgroundColorSpan(bgColor),
-            0,
-            text.length,
-            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-        return span
+    private fun isSimilar(a: String, b: String): Boolean {
+        if (a.isEmpty() || b.isEmpty()) return false
+        val maxLen = max(a.length, b.length)
+        if (maxLen == 0) return true
+        
+        val prefix = commonPrefixLength(a, b)
+        val suffix = commonSuffixLength(a, b, prefix)
+        
+        // If more than 40% matches, consider it a modification
+        return (prefix + suffix).toFloat() / maxLen > 0.4f
     }
 
-    private fun createPhantomLine(): SpannableString {
-        val span = SpannableString(PHANTOM_TEXT)
-        span.setSpan(
-            ForegroundColorSpan(AndroidColor.TRANSPARENT),
-            0,
-            PHANTOM_TEXT.length,
-            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-        return span
+    private fun commonPrefixLength(a: String, b: String): Int {
+        val n = kotlin.math.min(a.length, b.length)
+        for (i in 0 until n) {
+            if (a[i] != b[i]) return i
+        }
+        return n
+    }
+
+    private fun commonSuffixLength(a: String, b: String, offset: Int): Int {
+        val n = kotlin.math.min(a.length, b.length) - offset
+        if (n <= 0) return 0
+        for (i in 1..n) {
+            if (a[a.length - i] != b[b.length - i]) return i - 1
+        }
+        return n
+    }
+
+    private fun processStack(
+        stack: LinkedList<DiffLine>,
+        builder: StringBuilder,
+        container: HighlightTextContainer,
+        isLeft: Boolean
+    ) {
+        var currentLine = 0
+        stack.forEach { line ->
+            val text = line.text
+            builder.append(text)
+            
+            if (line.type != LineType.NORMAL) {
+                val color = when (line.type) {
+                    LineType.ADD -> AddColor
+                    LineType.DELETE -> DeleteColor
+                    LineType.MODIFY -> if (isLeft) DeleteColor else AddColor
+                    else -> null
+                }
+                
+                if (color != null) {
+                    // Highlight the entire line
+                    container.add(
+                        HighlightTextContainer.HighlightText(
+                            currentLine, 0,
+                            currentLine, text.length,
+                            color
+                        )
+                    )
+                }
+
+                // Highlight Word Diff for Modify
+                if (line.type == LineType.MODIFY && line.originalText != null) {
+                    val otherStr = line.originalText
+                    val thisStr = text.removeSuffix("\n")
+                    
+                    val prefix = commonPrefixLength(thisStr, otherStr)
+                    val suffix = commonSuffixLength(thisStr, otherStr, prefix)
+                    
+                    val start = prefix
+                    val end = thisStr.length - suffix
+                    
+                    if (end > start) {
+                        val wordColor = if (isLeft) DeleteWordColor else AddWordColor
+                        container.add(
+                            HighlightTextContainer.HighlightText(
+                                currentLine, start,
+                                currentLine, end,
+                                wordColor
+                            )
+                        )
+                    }
+                }
+            }
+
+            if (text.endsWith("\n")) {
+                currentLine++
+            }
+        }
     }
 }
 
-class SpannableString(source: CharSequence) : android.text.SpannableString(source)

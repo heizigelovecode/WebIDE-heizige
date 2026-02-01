@@ -227,4 +227,46 @@ object EditorColorSchemeManager {
         val b = AndroidColor.blue(color)
         return AndroidColor.argb(a, r, g, b)
     }
+
+    /**
+     * 获取 Diff 视图的新增行背景色
+     */
+    fun getDiffAddColor(scheme: EditorColorScheme): Int {
+        val isDark = isDarkScheme(scheme)
+        // 深色模式下用深绿，浅色模式下用浅绿，或者统一用半透明绿
+        return if (isDark) 0x401B5E20 else 0x40A5D6A7
+    }
+
+    /**
+     * 获取 Diff 视图的删除行背景色
+     */
+    fun getDiffDeleteColor(scheme: EditorColorScheme): Int {
+        val isDark = isDarkScheme(scheme)
+        return if (isDark) 0x40B71C1C else 0x40EF9A9A
+    }
+
+    /**
+     * 获取 Diff 视图的新增行背景色 (Word Level)
+     */
+    fun getDiffAddWordColor(scheme: EditorColorScheme): Int {
+        val isDark = isDarkScheme(scheme)
+        return if (isDark) 0x802E7D32.toInt() else 0x8066BB6A.toInt()
+    }
+
+    /**
+     * 获取 Diff 视图的删除行背景色 (Word Level)
+     */
+    fun getDiffDeleteWordColor(scheme: EditorColorScheme): Int {
+        val isDark = isDarkScheme(scheme)
+        return if (isDark) 0x80C62828.toInt() else 0x80EF5350.toInt()
+    }
+
+    private fun isDarkScheme(scheme: EditorColorScheme): Boolean {
+        val bg = scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND)
+        // 简单计算亮度，如果 R/G/B 平均值小于 128 认为是深色
+        val r = AndroidColor.red(bg)
+        val g = AndroidColor.green(bg)
+        val b = AndroidColor.blue(bg)
+        return (r * 0.299 + g * 0.587 + b * 0.114) < 128
+    }
 }
