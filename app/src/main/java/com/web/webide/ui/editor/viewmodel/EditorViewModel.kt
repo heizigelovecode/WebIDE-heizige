@@ -85,8 +85,9 @@ enum class DiffViewMode { SPLIT, UNIFIED }
 class DiffEditorState(
     override val file: File,
     val originalContent: String,
-    var currentContent: String
+    initialCurrentContent: String
 ) : IEditorTab {
+    var currentContent by mutableStateOf(initialCurrentContent)
     override val title: String = "${file.name} (Diff)"
     override val uniqueId: String = "diff_${file.absolutePath}_${UUID.randomUUID()}"
     var viewMode by mutableStateOf(DiffViewMode.SPLIT)
@@ -157,6 +158,92 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var isIgnoreCase = true
     private var isFormatting = false
 
+    // ==========================================
+    // Unified Content Synchronization Logic
+    // ==========================================
+
+    /**
+     * Centralized method to handle content updates from ANY source (Editor, Diff, etc.)
+     * This ensures that changes are reflected across:
+     * 1. Physical File (optional, mostly for Diff)
+     * 2. CodeEditorState (if open)
+     * 3. DiffEditorState (if open)
+     * 4. Active CodeEditor UI instances (for real-time visual sync)
+     */
+    fun onContentChanged(
+        file: File,
+        newContent: String,
+        sourceInstance: Any? = null,
+        saveToFile: Boolean = false
+    ) {
+        val canonicalPath = try { file.canonicalPath } catch (_: Exception) { file.absolutePath }
+        
+        // 1. Sync to Physical File (if requested)
+        if (saveToFile) {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    file.writeText(newContent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+
+        // 2. Sync to CodeEditorState
+        openFiles.filterIsInstance<CodeEditorState>()
+            .find { 
+                val p = try { it.file.canonicalPath } catch (_: Exception) { it.file.absolutePath }
+                p == canonicalPath
+            }?.let { state ->
+                if (state.content != newContent) {
+                    state.content = newContent
+                    // If saved to file, update savedContent too
+                    if (saveToFile) {
+                        state.savedContent = newContent
+                    }
+                }
+            }
+
+        // 3. Sync to DiffEditorState
+        openFiles.filterIsInstance<DiffEditorState>()
+            .find {
+                val p = try { it.file.canonicalPath } catch (_: Exception) { it.file.absolutePath }
+                p == canonicalPath
+            }?.let { state ->
+                if (state.currentContent != newContent) {
+                    state.currentContent = newContent
+                }
+            }
+
+        // 4. Sync to Active Editor Instances (Visual Update)
+        viewModelScope.launch(Dispatchers.Main) {
+            editorInstances.entries.forEach { (path, editor) ->
+                // Skip if this editor instance initiated the change
+                if (editor === sourceInstance) return@forEach
+
+                val entryFile = File(path)
+                val entryPath = try { entryFile.canonicalPath } catch (_: Exception) { entryFile.absolutePath }
+
+                if (entryPath == canonicalPath) {
+                    if (editor.text.toString() != newContent) {
+                        val cursor = editor.cursor
+                        val line = cursor.leftLine
+                        val column = cursor.leftColumn
+                        
+                        editor.setText(newContent)
+                        
+                        // Try to preserve cursor
+                        try {
+                            if (line < editor.text.lineCount) {
+                                editor.setSelection(line, column.coerceAtMost(editor.text.getColumnCount(line)))
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+        }
+    }
+
     @Synchronized
     fun getOrCreateEditor(context: Context, state: CodeEditorState): CodeEditor {
         val filePath = state.file.absolutePath
@@ -189,11 +276,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 override fun beforeReplace(content: Content) {}
                 override fun afterInsert(content: Content, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, inserted: CharSequence) {
                     val newText = content.toString()
-                    if (state.content != newText) state.content = newText
+                    // Use centralized sync
+                    onContentChanged(state.file, newText, sourceInstance = this@apply)
                 }
                 override fun afterDelete(content: Content, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, deleted: CharSequence) {
                     val newText = content.toString()
-                    if (state.content != newText) state.content = newText
+                    // Use centralized sync
+                    onContentChanged(state.file, newText, sourceInstance = this@apply)
                 }
             })
         }
@@ -277,50 +366,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateDiffContent(state: DiffEditorState, newContent: String) {
-        if (state.currentContent == newContent) return
-        state.currentContent = newContent
-        
-        // Log update
-        android.util.Log.d("EditorViewModel", "updateDiffContent: ${state.file.name}, length=${newContent.length}")
-
-        // Sync to file
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                state.file.writeText(newContent)
-                android.util.Log.d("EditorViewModel", "File saved: ${state.file.absolutePath}")
-            } catch (e: Exception) {
-                e.printStackTrace()
-                android.util.Log.e("EditorViewModel", "File save failed: ${e.message}")
-            }
-        }
-        
-        // Sync to open CodeEditor tabs if any
-        openFiles.filterIsInstance<CodeEditorState>()
-            .find { it.file.absolutePath == state.file.absolutePath }
-            ?.let { editorState ->
-                editorState.content = newContent
-                editorState.savedContent = newContent
-                
-                // 强制更新已存在的 Editor 实例
-                // 必须在主线程执行
-                viewModelScope.launch(Dispatchers.Main) {
-                    editorInstances[editorState.file.absolutePath]?.let { editor ->
-                        if (editor.text.toString() != newContent) {
-                            android.util.Log.d("EditorViewModel", "Syncing active editor instance")
-                            val cursor = editor.cursor
-                            val line = cursor.leftLine
-                            val column = cursor.leftColumn
-                            editor.setText(newContent)
-                            // 尝试保持光标位置 (尽力而为)
-                            try {
-                                if (line < editor.text.lineCount) {
-                                    editor.setSelection(line, column.coerceAtMost(editor.text.getColumnCount(line)))
-                                }
-                            } catch (_: Exception) {}
-                        }
-                    }
-                }
-            }
+        // Use centralized sync logic
+        // sourceInstance is null because DiffViewer manages its own editor instance separately, 
+        // but we want to update the main editor instances if they exist.
+        // saveToFile = true because Diff view changes are meant to be persisted immediately (per user request)
+        onContentChanged(
+            file = state.file,
+            newContent = newContent,
+            sourceInstance = null, 
+            saveToFile = true
+        )
     }
 
     private fun loadTreeSitterLanguage(context: Context, extension: String): TsLanguage? {

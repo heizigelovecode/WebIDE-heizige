@@ -189,14 +189,24 @@ fun DiffViewer(
     modifier: Modifier = Modifier
 ) {
     // 异步计算差异
-    // 强制在只读状态切换时重新计算，以修复因编辑导致的高亮偏移问题
-    var diffData by remember(state.originalContent, state.currentContent) {
+    // 使用 state 作为 key，确保切换文件时重置，但修改内容时不重置 (防止闪烁)
+    var diffData by remember(state) {
         mutableStateOf<AlignedDiffResult?>(null)
     }
 
     LaunchedEffect(state.originalContent, state.currentContent) {
+        // 防抖：避免每次击键都重新计算差异，导致左侧编辑器频繁跳动
+        // 首次加载不需要防抖
+        if (diffData != null) {
+            kotlinx.coroutines.delay(500)
+        }
+        
         withContext(Dispatchers.Default) {
-            diffData = DiffAligner.align(state.originalContent, state.currentContent)
+            val newData = DiffAligner.align(state.originalContent, state.currentContent)
+            // 只有当差异真正变化时才更新 UI
+            if (diffData != newData) {
+                diffData = newData
+            }
         }
     }
 
@@ -373,6 +383,9 @@ fun DiffEditorInstance(
     // 记录上一次用户输入的时间，用于防抖
     val lastUserInputTime = remember { mutableStateOf(0L) }
 
+    // 修复：使用 rememberUpdatedState 确保回调始终是最新的
+    val currentOnContentChanged by rememberUpdatedState(onContentChanged)
+
     AndroidView(
         factory = { ctx ->
             CodeEditor(ctx).apply {
@@ -400,6 +413,7 @@ fun DiffEditorInstance(
                 // 4. 设置字号和Tab：必须完全一致
                 tabWidth = editorConfig.tabWidth
 
+                // 初始语言设置
                 try {
                     viewModel.applyLanguageToEditor(this, java.io.File(fileName).extension)
                 } catch (_: Exception) {}
@@ -418,7 +432,7 @@ fun DiffEditorInstance(
                             val cleanText = text.toString()
                                 .replace("\u200B\n", "")
                                 .replace("\u200B", "")
-                            onContentChanged?.invoke(cleanText)
+                            currentOnContentChanged?.invoke(cleanText)
                         }
                     }
                     override fun afterDelete(content: Content, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, deleted: CharSequence) {
@@ -428,7 +442,7 @@ fun DiffEditorInstance(
                             val cleanText = text.toString()
                                 .replace("\u200B\n", "")
                                 .replace("\u200B", "")
-                            onContentChanged?.invoke(cleanText)
+                            currentOnContentChanged?.invoke(cleanText)
                         }
                     }
                 })
@@ -439,9 +453,22 @@ fun DiffEditorInstance(
         update = { editor ->
             // 确保每次重组时都更新主题色，以响应系统主题变化
             EditorColorSchemeManager.applyThemeColors(editor.colorScheme, primaryColor, isDark)
+            
+            // 确保语言设置正确 (Fix: 防止重组后语言丢失或未更新)
+            try {
+                val currentExt = java.io.File(fileName).extension
+                // 这里可以优化：检查当前 editorLanguage 是否匹配，不匹配再设置
+                // 但 EditorViewModel.applyLanguageToEditor 内部有缓存/检查机制，直接调用通常安全
+                viewModel.applyLanguageToEditor(editor, currentExt)
+            } catch (_: Exception) {}
 
             if (editor.isEditable != !readOnly) {
                 editor.isEditable = !readOnly
+            }
+
+            // 确保 WordWrap 始终关闭 (Fix: 防止左侧自动换行)
+            if (editor.isWordwrap) {
+                editor.isWordwrap = false
             }
 
             // 只有内容真变了才 Set，防止重置位置
@@ -457,6 +484,9 @@ fun DiffEditorInstance(
                     val cursor = editor.cursor
                     val line = cursor.leftLine
                     val column = cursor.leftColumn
+                    val scroller = editor.eventHandler.scroller
+                    val scrollX = scroller.currX
+                    val scrollY = scroller.currY
                     
                     editor.setText(content)
                     
@@ -464,6 +494,11 @@ fun DiffEditorInstance(
                     if (line < editor.text.lineCount) {
                          editor.setSelection(line, column.coerceAtMost(editor.text.getColumnCount(line)))
                     }
+                    
+                    // 恢复滚动位置 (Fix: 防止左侧编辑器跳动)
+                    if (!scroller.isFinished) scroller.forceFinished(true)
+                    scroller.startScroll(scrollX, scrollY, 0, 0, 0)
+                    editor.eventHandler.notifyScrolled()
                 } finally {
                     isUpdatingRef.value = false
                 }
