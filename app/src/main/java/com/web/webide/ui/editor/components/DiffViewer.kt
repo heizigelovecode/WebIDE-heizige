@@ -424,7 +424,7 @@ fun DiffEditorInstance(
     // 使用 remember 保存一个 MutableState，在 AndroidView 内部访问
     val isUpdatingRef = remember { mutableStateOf(false) }
     // 记录上一次用户输入的时间，用于防抖
-    val lastUserInputTime = remember { mutableStateOf(0L) }
+    val lastUserInputTime = remember { mutableLongStateOf(0L) }
 
     // 修复：使用 rememberUpdatedState 确保回调始终是最新的
     val currentOnContentChanged by rememberUpdatedState(onContentChanged)
@@ -468,7 +468,7 @@ fun DiffEditorInstance(
                     override fun beforeReplace(content: Content) {}
                     override fun afterInsert(content: Content, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, inserted: CharSequence) {
                         if (!isUpdatingRef.value) {
-                            lastUserInputTime.value = System.currentTimeMillis()
+                            lastUserInputTime.longValue = System.currentTimeMillis()
                             // 过滤掉 Diff 对齐用的占位符 (\u200B)
                             // 1. 先移除整行占位符 (防止产生空行)
                             // 2. 再移除残留的占位符 (防止用户编辑了占位行)
@@ -480,7 +480,7 @@ fun DiffEditorInstance(
                     }
                     override fun afterDelete(content: Content, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, deleted: CharSequence) {
                         if (!isUpdatingRef.value) {
-                            lastUserInputTime.value = System.currentTimeMillis()
+                            lastUserInputTime.longValue = System.currentTimeMillis()
                             // 过滤掉 Diff 对齐用的占位符 (\u200B)
                             val cleanText = text.toString()
                                 .replace("\u200B\n", "")
@@ -518,7 +518,7 @@ fun DiffEditorInstance(
             val contentChanged = editor.text.toString() != content
             // 防抖：如果用户最近在输入（1000ms内），则不要强制覆盖内容，除非内容差异巨大（这里简化为只看时间）
             // 注意：这会导致对齐暂时失效，但能保证输入流畅和保存成功
-            val isUserTyping = (System.currentTimeMillis() - lastUserInputTime.value) < 1000
+            val isUserTyping = (System.currentTimeMillis() - lastUserInputTime.longValue) < 1000
             
             // 如果是只读模式，或者是第一次加载，或者不是用户正在输入，则更新
             if (contentChanged && (readOnly || !isUserTyping)) {
