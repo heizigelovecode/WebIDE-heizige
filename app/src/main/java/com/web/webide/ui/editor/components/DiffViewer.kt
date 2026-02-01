@@ -40,6 +40,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.luminance
+import com.web.webide.ui.editor.EditorColorSchemeManager
 import com.web.webide.ui.editor.viewmodel.DiffEditorState
 import com.web.webide.ui.editor.viewmodel.DiffViewMode
 import com.web.webide.ui.editor.viewmodel.EditorViewModel
@@ -293,7 +295,6 @@ fun SplitDiffView(
                     content = data.leftContent,
                     fileName = state.file.name,
                     viewModel = viewModel,
-                    isLeft = true,
                     onEditorCreated = { leftEditorRef = it }
                 )
             }
@@ -304,7 +305,6 @@ fun SplitDiffView(
                     content = data.rightContent,
                     fileName = state.file.name,
                     viewModel = viewModel,
-                    isLeft = false,
                     onEditorCreated = { rightEditorRef = it }
                 )
             }
@@ -319,7 +319,6 @@ fun UnifiedDiffView(state: DiffEditorState, viewModel: EditorViewModel, data: Al
             content = data.rightContent,
             fileName = state.file.name,
             viewModel = viewModel,
-            isLeft = false,
             onEditorCreated = {}
         )
     }
@@ -344,10 +343,11 @@ fun DiffEditorInstance(
     content: CharSequence,
     fileName: String,
     viewModel: EditorViewModel,
-    isLeft: Boolean,
     onEditorCreated: (CodeEditor) -> Unit
 ) {
     val editorConfig = viewModel.editorConfig
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
     AndroidView(
         factory = { ctx ->
@@ -379,18 +379,15 @@ fun DiffEditorInstance(
                     viewModel.applyLanguageToEditor(this, java.io.File(fileName).extension)
                 } catch (_: Exception) {}
 
-                val scheme = colorScheme
-                if (isLeft) {
-                    scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, 0xFF252526.toInt())
-                } else {
-                    scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, 0xFF1E1E1E.toInt())
-                }
-                colorScheme = scheme
+                EditorColorSchemeManager.applyThemeColors(colorScheme, primaryColor, isDark)
 
                 onEditorCreated(this)
             }
         },
         update = { editor ->
+            // 确保每次重组时都更新主题色，以响应系统主题变化
+            EditorColorSchemeManager.applyThemeColors(editor.colorScheme, primaryColor, isDark)
+
             // 只有内容真变了才 Set，防止重置位置
             if (editor.text.toString() != content.toString()) {
                 editor.setText(content)
