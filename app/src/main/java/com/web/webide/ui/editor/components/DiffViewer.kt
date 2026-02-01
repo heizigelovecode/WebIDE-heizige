@@ -46,7 +46,6 @@ import com.web.webide.ui.editor.viewmodel.DiffEditorState
 import com.web.webide.ui.editor.viewmodel.DiffViewMode
 import com.web.webide.ui.editor.viewmodel.EditorViewModel
 import io.github.rosemoe.sora.widget.CodeEditor
-import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import io.github.rosemoe.sora.event.SubscriptionReceipt
