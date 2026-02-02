@@ -75,6 +75,9 @@ class TinyWebServer(private val rootDir: File) {
     private val isRunning = AtomicBoolean(false)
     var port: Int = 0
         private set
+    
+    // 控制是否注入 Eruda
+    var isDebug = AtomicBoolean(false)
 
     // 定义常见的前端源码目录，服务器会自动去这些目录里找文件
     private val fallbackDirectories = listOf(
@@ -175,28 +178,7 @@ class TinyWebServer(private val rootDir: File) {
                 var fileBytes = targetFile.readBytes()
                 val contentType = getMimeType(targetFile.name)
                 val isHtml = contentType.contains("html")
-                val shouldInject = true
-                if (isHtml && shouldInject) {
-                    val originalHtml = String(fileBytes, Charsets.UTF_8)
-                    val injection = """
-            <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-            <script>eruda.init();</script>
-        """.trimIndent()
-
-                    // 插在 <head> 后面，保证最先执行
-                    val modifiedHtml = if (originalHtml.contains("<head>")) {
-                        originalHtml.replace("<head>", "<head>\n$injection")
-                    } else {
-                        // 如果没有 head，就插在 html 后面
-                        "<html>\n$injection\n" + originalHtml.substringAfter("<html>")
-                    }
-
-                    fileBytes = modifiedHtml.toByteArray(Charsets.UTF_8)
-                }
-
-
-
-
+                
                 output.writeBytes("HTTP/1.1 200 OK\r\n")
                 output.writeBytes("Content-Type: $contentType\r\n")
                 output.writeBytes("Content-Length: ${fileBytes.size}\r\n")
@@ -262,8 +244,10 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
 
     // --- 0. 启动服务器 ---
     var serverPort by remember { mutableIntStateOf(0) }
+    // 使用 remember 保持 server 实例，避免重复创建
+    val server = remember(projectDir) { TinyWebServer(projectDir) }
+    
     DisposableEffect(projectDir) {
-        val server = TinyWebServer(projectDir)
         val port = server.start()
         serverPort = port
         onDispose { server.stop() }
@@ -305,6 +289,12 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
     val prefs =
         remember { context.getSharedPreferences("WebIDE_Project_Settings", Context.MODE_PRIVATE) }
     var isDebugEnabled by remember { mutableStateOf(prefs.getBoolean("debug_$folderName", false)) }
+
+    // 当 isDebugEnabled 变化时，更新 server 的状态
+    LaunchedEffect(isDebugEnabled) {
+        server.isDebug.set(isDebugEnabled)
+    }
+
     var currentUAType by remember {
         mutableStateOf(
             prefs.getString(
@@ -503,6 +493,7 @@ fun WebPreviewScreen(folderName: String, navController: NavController, viewModel
                         IconButton(onClick = {
                             isDebugEnabled = !isDebugEnabled
                             prefs.edit().putBoolean("debug_$folderName", isDebugEnabled).apply()
+                            webViewRef?.clearCache(true)
                             webViewRef?.reload()
                         }) {
                             Icon(
@@ -599,6 +590,7 @@ private fun configureFullWebView(
     settings.databaseEnabled = true
     settings.allowFileAccess = true
     settings.mediaPlaybackRequiresUserGesture = false
+    settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
     var finalUA = ""
     var baseTextZoom = 100
@@ -681,7 +673,6 @@ private fun configureFullWebView(
         }
     }
 
-    // --- 修复 1: 绑定下载监听器 ---
     webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
         // 复用 SharedWebInterface 里的下载逻辑，或者直接在这里写
         // 这里我们简单起见，直接启动系统下载
@@ -805,19 +796,8 @@ private fun injectEruda(context: Context, webView: WebView?) {
         }
         """
     } else {
-        // CDN 备用方案
-        """
-        (function () { 
-            if (window.eruda) return;
-            var script = document.createElement('script'); 
-            script.src = "https://cdn.jsdelivr.net/npm/eruda/eruda.min.js"; 
-            document.body.appendChild(script); 
-            script.onload = function () { 
-                eruda.init(); 
-                console.log('Eruda [CDN] init success'); 
-            };
-        })();
-        """
+        // 本地资源加载失败，不执行 CDN 备用方案
+        "console.error('Eruda load failed: assets/eruda.min.js not found');"
     }
 
     webView.evaluateJavascript(finalScript) { result ->
