@@ -49,6 +49,7 @@ palette = "1.0.0"
 accompanist = "0.36.0"
 materialIcons = "1.7.8"
 foundationLayout = "1.10.1"
+uiVersion = "1.10.2"
 
 
 [libraries]
@@ -137,6 +138,7 @@ anrwatchdog = { group = "com.github.anrwatchdog", name = "anrwatchdog", version.
 lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "lifecycleRuntimeKtx" }
 activity = { group = "androidx.activity", name = "activity", version.ref = "activityCompose" }
 androidx-compose-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
+androidx-compose-ui-ui = { group = "androidx.compose.ui", name = "ui", version.ref = "uiVersion" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

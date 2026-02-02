@@ -65,6 +65,7 @@ import com.web.webide.files.FileTree
 import com.web.webide.safeNavigate
 import com.web.webide.ui.components.ColorPickerDialog
 import com.web.webide.ui.components.colorToHex
+import com.web.webide.ui.editor.aicoding.AICodingPanel
 import com.web.webide.ui.editor.components.EditorPanelLayout
 import com.web.webide.ui.editor.components.EditorToolbar
 import com.web.webide.ui.editor.components.JumpLinePanel
@@ -571,6 +572,8 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
                                 )
                             }
                         }
+                        
+                        AICodingPanel()
                     }
                 }
             )
