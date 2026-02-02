@@ -43,8 +43,17 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "webide_log_config")
 
+data class LogEntry(
+    val timestamp: Long,
+    val level: String,
+    val tag: String,
+    val message: String
+)
 
 data class LogConfigState(
     val isLogEnabled: Boolean = true,
@@ -118,6 +127,24 @@ object LogCatcher {
     @Volatile
     private var isInitialized = false
 
+    private val _logFlow = MutableSharedFlow<LogEntry>(extraBufferCapacity = 1000)
+    val logFlow = _logFlow.asSharedFlow()
+
+    // 用于存储构建日志的历史记录
+    private val _buildLogs = Collections.synchronizedList(ArrayList<LogEntry>())
+
+    @JvmStatic
+    fun getBuildLogs(): List<LogEntry> {
+        synchronized(_buildLogs) {
+            return ArrayList(_buildLogs)
+        }
+    }
+
+    @JvmStatic
+    fun clearBuildLogs() {
+        _buildLogs.clear()
+    }
+
     @JvmStatic
     fun updateConfig(config: LogConfigState) {
         logConfig = config
@@ -130,6 +157,7 @@ object LogCatcher {
         if (shouldLog()) {
             android.util.Log.d(tag, message)
             writeToFile("DEBUG", tag, message)
+            emitLog("DEBUG", tag, message)
         }
     }
 
@@ -138,6 +166,7 @@ object LogCatcher {
         if (shouldLog()) {
             android.util.Log.i(tag, message)
             writeToFile("INFO", tag, message)
+            emitLog("INFO", tag, message)
         }
     }
 
@@ -146,6 +175,7 @@ object LogCatcher {
         if (shouldLog()) {
             android.util.Log.w(tag, message)
             writeToFile("WARN", tag, message)
+            emitLog("WARN", tag, message)
         }
     }
 
@@ -154,8 +184,21 @@ object LogCatcher {
     fun e(tag: String, message: String, exception: Exception? = null) {
         android.util.Log.e(tag, message, exception)
         if (shouldLog()) {
-            writeToFile("ERROR", tag, "$message${exception?.let { " - ${it.message}" } ?: ""}")
+            val msg = "$message${exception?.let { " - ${it.message}" } ?: ""}"
+            writeToFile("ERROR", tag, msg)
+            emitLog("ERROR", tag, msg)
         }
+    }
+
+    private fun emitLog(level: String, tag: String, message: String) {
+        val entry = LogEntry(System.currentTimeMillis(), level, tag, message)
+        
+        // 如果是构建相关的日志，保存到历史记录中
+        if (tag == "ApkBuilder" || tag == "Build") {
+            _buildLogs.add(entry)
+        }
+        
+        _logFlow.tryEmit(entry)
     }
 
     private fun shouldLog(): Boolean {

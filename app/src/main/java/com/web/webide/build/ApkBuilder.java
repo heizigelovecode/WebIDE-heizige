@@ -85,6 +85,8 @@ public class ApkBuilder {
         File alignedZipFile = new File(bf, "temp_aligned.apk");
         File finalApkFile = new File(bf, aname + "_release.apk");
 
+        // 🔥 开始新构建前，清理旧的构建日志
+        LogCatcher.clearBuildLogs();
         LogCatcher.i("ApkBuilder", "========== 开始构建 WebApp (Debug: " + isDebug + ") ==========");
 
         try {

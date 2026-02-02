@@ -58,8 +58,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.web.webide.core.utils.LogCatcher
+import com.web.webide.core.utils.LogEntry
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.web.webide.ui.editor.viewmodel.CodeEditorState
 import com.web.webide.ui.editor.viewmodel.EditorViewModel
+import org.eclipse.lsp4j.Diagnostic
+import org.eclipse.lsp4j.DiagnosticSeverity
 
 enum class PanelPage(val title: String) {
     BUILD_LOG("构建"),
@@ -158,11 +168,77 @@ fun EditorPanelLayout(
 
                 Box(modifier = Modifier.weight(1f).fillMaxWidth().background(MaterialTheme.colorScheme.surface).alpha(contentAlpha)) {
                     when (tabs[selectedTabIndex]) {
-                        PanelPage.BUILD_LOG -> PlaceholderInfo("构建日志")
-                        PanelPage.DIAGNOSTICS -> PlaceholderInfo("诊断信息")
+                        PanelPage.BUILD_LOG -> BuildLogPanel()
+                        PanelPage.DIAGNOSTICS -> DiagnosticsPanel(viewModel)
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun DiagnosticsPanel(viewModel: EditorViewModel) {
+    val activeTab = viewModel.openFiles.getOrNull(viewModel.activeFileIndex)
+    val diagnostics = if (activeTab is CodeEditorState) activeTab.diagnostics else emptyList()
+
+    if (diagnostics.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("暂无问题", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            items(diagnostics) { diagnostic ->
+                DiagnosticItem(diagnostic) {
+                    // On click, jump to line
+                    val line = diagnostic.range.start.line
+                    val column = diagnostic.range.start.character
+                    viewModel.jumpTo(line, column)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DiagnosticItem(diagnostic: Diagnostic, onClick: () -> Unit) {
+    val color = when (diagnostic.severity) {
+        DiagnosticSeverity.Error -> MaterialTheme.colorScheme.error
+        DiagnosticSeverity.Warning -> Color(0xFFFFA000)
+        DiagnosticSeverity.Information -> MaterialTheme.colorScheme.primary
+        DiagnosticSeverity.Hint -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp)
+    ) {
+        // Icon or Color indicator
+        Box(
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(
+                text = diagnostic.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "${diagnostic.source ?: "LSP"} (${diagnostic.range.start.line + 1}, ${diagnostic.range.start.character + 1})",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -230,8 +306,71 @@ fun SymbolBarRow(symbols: List<String>, onSymbolClick: (String) -> Unit) {
 }
 
 @Composable
-fun PlaceholderInfo(text: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
+fun BuildLogPanel() {
+    val logs = remember { mutableStateListOf<LogEntry>() }
+    val listState = rememberLazyListState()
+
+    // 监听日志流
+    LaunchedEffect(Unit) {
+        // 1. 先加载历史记录
+        logs.clear()
+        logs.addAll(LogCatcher.getBuildLogs())
+        // 滚动到底部
+        if (logs.isNotEmpty()) {
+            listState.scrollToItem(logs.size - 1)
+        }
+
+        // 2. 监听新日志
+        LogCatcher.logFlow.collect { entry ->
+            // 只显示 ApkBuilder 或 Build 相关的日志
+            if (entry.tag == "ApkBuilder" || entry.tag == "Build") {
+                // 如果是新构建的开始，清理本地显示的旧日志
+                if (entry.message.contains("========== 开始构建")) {
+                    logs.clear()
+                }
+                
+                logs.add(entry)
+                // 自动滚动到底部
+                try {
+                    listState.scrollToItem(logs.size - 1)
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    if (logs.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("暂无构建日志", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    } else {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            items(logs) { log ->
+                val time = remember(log.timestamp) {
+                    SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(log.timestamp))
+                }
+                
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text(
+                        text = time,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(60.dp)
+                    )
+                    Text(
+                        text = log.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = when(log.level) {
+                            "ERROR" -> MaterialTheme.colorScheme.error
+                            "WARN" -> Color(0xFFFFA000) // Orange
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+                }
+            }
+        }
     }
 }

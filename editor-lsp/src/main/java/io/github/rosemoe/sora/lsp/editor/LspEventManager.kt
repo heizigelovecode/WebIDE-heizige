@@ -34,6 +34,8 @@ import org.eclipse.lsp4j.FormattingOptions
 import java.util.function.Supplier
 
 
+import io.github.rosemoe.sora.lsp.events.EventDisposable
+
 class LspEventManager(
     private val project: LspProject,
     private val editor: LspEditor
@@ -50,8 +52,8 @@ class LspEventManager(
     /**
      * Add a provider
      */
-    fun addEventListener(eventListener: EventListener) {
-        eventEmitter.addListener(eventListener)
+    fun addEventListener(eventListener: EventListener): EventDisposable {
+        return eventEmitter.addListener(eventListener)
     }
 
     /**
