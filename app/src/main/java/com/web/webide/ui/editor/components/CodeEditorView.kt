@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Segment
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
@@ -75,7 +76,11 @@ fun CodeEditorView(
     state: CodeEditorState,
     viewModel: EditorViewModel,
     onShowSearch: () -> Unit = {},
-    onRun: () -> Unit = {}
+    onRun: () -> Unit = {},
+    onNavigateToTerminal: () -> Unit = {},
+    onShowJumpLine: () -> Unit = {},
+    onShowCreate: () -> Unit = {},
+    onShowColorPicker: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -184,101 +189,117 @@ fun CodeEditorView(
 
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { showCommandDialog = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
         ) {
-            Surface(
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .wrapContentHeight(),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp
+                    .fillMaxSize()
+                    .systemBarsPadding()
+                    .imePadding(),
+                contentAlignment = Alignment.Center
             ) {
-                Column(
+                Surface(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
+                        .fillMaxWidth(0.9f)
+                        .fillMaxHeight(0.85f),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 6.dp
                 ) {
-                    // 保持输入法焦点的隐形输入框
-                    TextField(
-                        value = "",
-                        onValueChange = {},
+                    Column(
                         modifier = Modifier
-                            .focusRequester(focusRequester)
-                            .size(1.dp)
-                            .alpha(0f)
-                    )
+                            .fillMaxSize()
+                            .padding(16.dp)
+                    ) {
+                        // 保持输入法焦点的隐形输入框
+                        TextField(
+                            value = "",
+                            onValueChange = {},
+                            modifier = Modifier
+                                .focusRequester(focusRequester)
+                                .size(1.dp)
+                                .alpha(0f)
+                        )
 
-                    val actions = remember {
-                        listOf(
-                            Triple("剪切", Icons.Filled.ContentCut) { editor.cutText() },
-                            Triple("复制", Icons.Filled.ContentCopy) { editor.copyText() },
-                            Triple("粘贴", Icons.Filled.ContentPaste) { editor.pasteText() },
-                            Triple("全选", Icons.Filled.SelectAll) { editor.selectAll() },
-                            Triple("选择单行", Icons.AutoMirrored.Filled.Segment) {
-                                val cursor = editor.cursor
-                                val line = cursor.leftLine
-                                if (line < editor.text.lineCount) {
-                                    // 尝试使用 setSelectionRegion (如果可用) 或者回退到仅移动光标
-                                    try {
-                                        editor.setSelectionRegion(line, 0, line, editor.text.getColumnCount(line))
-                                    } catch (_: Exception) {
-                                        editor.setSelection(line, 0)
+                        val actions = remember {
+                            listOf(
+                                Triple("剪切", Icons.Filled.ContentCut) { editor.cutText() },
+                                Triple("复制", Icons.Filled.ContentCopy) { editor.copyText() },
+                                Triple("粘贴", Icons.Filled.ContentPaste) { editor.pasteText() },
+                                Triple("全选", Icons.Filled.SelectAll) { editor.selectAll() },
+                                Triple("选择单行", Icons.AutoMirrored.Filled.Segment) {
+                                    val cursor = editor.cursor
+                                    val line = cursor.leftLine
+                                    if (line < editor.text.lineCount) {
+                                        try {
+                                            editor.setSelectionRegion(line, 0, line, editor.text.getColumnCount(line))
+                                        } catch (_: Exception) {
+                                            editor.setSelection(line, 0)
+                                        }
                                     }
-                                }
-                            },
-                            Triple("保存", Icons.Filled.Save) {
-                                viewModel.onContentChanged(state.file, editor.text.toString(), saveToFile = true)
-                                state.onContentSaved()
-                            },
-                            Triple("保存全部", Icons.Filled.Save) {
+                                },
+                                Triple("保存", Icons.Filled.Save) {
+                                    viewModel.onContentChanged(state.file, editor.text.toString(), saveToFile = true)
+                                    state.onContentSaved()
+                                },
+                                Triple("保存全部", Icons.Filled.Save) {
                                 viewModel.openFiles.filterIsInstance<CodeEditorState>().filter { it.isModified }.forEach { s ->
                                     viewModel.onContentChanged(s.file, s.content, saveToFile = true)
                                     s.onContentSaved()
                                 }
                             },
                             Triple("撤销", Icons.AutoMirrored.Filled.Undo) { editor.undo() },
+                            Triple("重做", Icons.AutoMirrored.Filled.Redo) { editor.redo() },
+                            Triple("跳转行", Icons.Filled.SwapVert) { onShowJumpLine() },
+                            Triple("格式化", Icons.Filled.Menu) { viewModel.formatCode() },
+                            Triple("新建", Icons.Filled.Add) { onShowCreate() },
+                            Triple("调色板", Icons.Filled.ColorLens) { onShowColorPicker() },
+                            Triple("终端", Icons.Filled.Dns) { onNavigateToTerminal() },
                             Triple("运行", Icons.Filled.PlayArrow) {
                                 onRun()
                             },
-                            Triple("只读模式", Icons.Filled.Lock) {
-                                editor.isEditable = !editor.isEditable
-                            },
-                            Triple("搜索替换", Icons.Filled.Search) {
-                                onShowSearch()
-                            },
-                            Triple("重载", Icons.Filled.Refresh) {
-                                viewModel.reloadAllEditors(context)
-                            }
-                        )
-                    }
-
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(1),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 400.dp) // 自适应高度，最大400dp
-                    ) {
-                        items(actions) { (label, icon, action) ->
-                            FilledTonalButton(
-                                onClick = {
-                                    action()
-                                    showCommandDialog = false
+                                Triple("只读模式", Icons.Filled.Lock) {
+                                    editor.isEditable = !editor.isEditable
                                 },
-                                contentPadding = PaddingValues(12.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MaterialTheme.shapes.small
-                            ) {
-                                Row(
+                                Triple("搜索替换", Icons.Filled.Search) {
+                                    onShowSearch()
+                                },
+                                Triple("重载", Icons.Filled.Refresh) {
+                                    viewModel.reloadAllEditors(context)
+                                }
+                            )
+                        }
+
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(1),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        ) {
+                            items(actions) { (label, icon, action) ->
+                                FilledTonalButton(
+                                    onClick = {
+                                        action()
+                                        showCommandDialog = false
+                                    },
+                                    contentPadding = PaddingValues(12.dp),
                                     modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Start
+                                    shape = MaterialTheme.shapes.small
                                 ) {
-                                    Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Text(label, style = MaterialTheme.typography.bodyMedium)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Start
+                                    ) {
+                                        Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Text(label, style = MaterialTheme.typography.bodyMedium)
+                                    }
                                 }
                             }
                         }
@@ -286,7 +307,7 @@ fun CodeEditorView(
                 }
             }
         }
-        
+
         LaunchedEffect(Unit) {
             focusRequester.requestFocus()
         }

@@ -563,7 +563,11 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
                                     onShowSearch = { isOpenSearch = true },
                                     snackbarHostState = snackbarHostState,
                                     navController = navController,
-                                    folderName = folderName
+                                    folderName = folderName,
+                                    onNavigateToTerminal = { navController.safeNavigate("terminal") },
+                                    onShowJumpLine = { isOpenJump = true },
+                                    onShowCreate = { showCreateDialog = true },
+                                    onShowColorPicker = { showColorPicker = true }
                                 )
                             }
                         }
@@ -693,7 +697,11 @@ fun EditCode(
     onShowSearch: () -> Unit,
     snackbarHostState: SnackbarHostState,
     navController: NavController,
-    folderName: String
+    folderName: String,
+    onNavigateToTerminal: () -> Unit,
+    onShowJumpLine: () -> Unit,
+    onShowCreate: () -> Unit,
+    onShowColorPicker: () -> Unit
 ) {
     val openFiles = viewModel.openFiles
     val activeFileIndex = viewModel.activeFileIndex
@@ -808,7 +816,11 @@ fun EditCode(
                                         viewModel.saveAllModifiedFiles(snackbarHostState)
                                         navController.safeNavigate("preview/$folderName")
                                     }
-                                }
+                                },
+                                onNavigateToTerminal = onNavigateToTerminal,
+                                onShowJumpLine = onShowJumpLine,
+                                onShowCreate = onShowCreate,
+                                onShowColorPicker = onShowColorPicker
                             )
                         }
                         is com.web.webide.ui.editor.viewmodel.DiffEditorState -> {
