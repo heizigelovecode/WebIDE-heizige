@@ -21,20 +21,39 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import androidx.core.content.edit
 
+import java.io.File
+import java.io.FileReader
+import java.io.FileWriter
+
+import java.util.UUID
+
 data class ChatMessage(
     val role: String, // "user", "assistant", "system"
     val content: String,
     val reasoningContent: String? = null,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val id: String = UUID.randomUUID().toString()
+)
+
+data class ChatSession(
+    val id: String,
+    var title: String,
+    val messages: List<ChatMessage>,
+    val timestamp: Long
 )
 
 class AICodingViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences("ai_coding_settings", Context.MODE_PRIVATE)
+    private val sessionsFile = File(application.filesDir, "ai_chat_sessions.json")
 
     var apiKey by mutableStateOf(prefs.getString("api_key", "") ?: "")
     var baseUrl by mutableStateOf(prefs.getString("base_url", "https://api.openai.com/v1") ?: "https://api.openai.com/v1")
     var model by mutableStateOf(prefs.getString("model", "gpt-3.5-turbo") ?: "gpt-3.5-turbo")
     
+    // Session Management
+    val sessions = mutableStateListOf<ChatSession>()
+    var currentSessionId by mutableStateOf<String?>(null)
+
     // Provider Logic
     enum class ApiProvider(val displayName: String, val defaultBaseUrl: String, val defaultModel: String) {
         OPENAI("OpenAI", "https://api.openai.com/v1", "gpt-4o"),
@@ -59,8 +78,6 @@ class AICodingViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    var selectedProvider by mutableStateOf(ApiProvider.fromUrl(baseUrl))
-
     val availableModels = mutableStateListOf<String>()
     var isFetchingModels by mutableStateOf(false)
 
@@ -74,9 +91,145 @@ class AICodingViewModel(application: Application) : AndroidViewModel(application
         .build()
 
     init {
-        // Add initial system message or greeting if empty
-        if (messages.isEmpty()) {
-            messages.add(ChatMessage("assistant", "Hello! I am your AI coding assistant. Please configure your API Key in settings to start."))
+        loadSessions()
+        if (sessions.isEmpty()) {
+            createNewSession()
+        } else {
+            // Load the most recent session
+            loadSession(sessions.first().id)
+        }
+    }
+    
+    // --- Session Management ---
+
+    fun createNewSession() {
+        val newSession = ChatSession(
+            id = UUID.randomUUID().toString(),
+            title = "New Chat",
+            messages = listOf(
+                ChatMessage("assistant", "Hello! I am your AI coding assistant. Please configure your API Key in settings to start.")
+            ),
+            timestamp = System.currentTimeMillis()
+        )
+        sessions.add(0, newSession)
+        loadSession(newSession.id)
+        saveSessions()
+    }
+
+    fun loadSession(sessionId: String) {
+        val session = sessions.find { it.id == sessionId } ?: return
+        currentSessionId = sessionId
+        messages.clear()
+        messages.addAll(session.messages)
+    }
+
+    fun deleteSession(sessionId: String) {
+        val index = sessions.indexOfFirst { it.id == sessionId }
+        if (index != -1) {
+            sessions.removeAt(index)
+            saveSessions()
+            
+            if (currentSessionId == sessionId) {
+                if (sessions.isNotEmpty()) {
+                    loadSession(sessions.first().id)
+                } else {
+                    createNewSession()
+                }
+            }
+        }
+    }
+    
+    private fun updateCurrentSession() {
+        val currentId = currentSessionId ?: return
+        val index = sessions.indexOfFirst { it.id == currentId }
+        if (index != -1) {
+            val updatedSession = sessions[index].copy(
+                messages = messages.toList(),
+                timestamp = System.currentTimeMillis()
+            )
+            // Auto-title based on first user message if title is "New Chat"
+            if (updatedSession.title == "New Chat") {
+                val firstUserMsg = messages.firstOrNull { it.role == "user" }
+                if (firstUserMsg != null) {
+                    updatedSession.title = firstUserMsg.content.take(30) + if (firstUserMsg.content.length > 30) "..." else ""
+                }
+            }
+            
+            sessions[index] = updatedSession
+            // Move to top
+            sessions.removeAt(index)
+            sessions.add(0, updatedSession)
+            saveSessions()
+        }
+    }
+
+    private fun loadSessions() {
+        if (!sessionsFile.exists()) return
+        try {
+            val jsonStr = FileReader(sessionsFile).use { it.readText() }
+            val jsonArray = JSONArray(jsonStr)
+            
+            val loadedSessions = mutableListOf<ChatSession>()
+            for (i in 0 until jsonArray.length()) {
+                val sessionObj = jsonArray.getJSONObject(i)
+                val id = sessionObj.getString("id")
+                val title = sessionObj.getString("title")
+                val timestamp = sessionObj.getLong("timestamp")
+                val msgsArray = sessionObj.getJSONArray("messages")
+                
+                val msgs = mutableListOf<ChatMessage>()
+                for (j in 0 until msgsArray.length()) {
+                    val msgObj = msgsArray.getJSONObject(j)
+                    val msgId = if (msgObj.has("id")) msgObj.getString("id") else UUID.randomUUID().toString()
+                    msgs.add(ChatMessage(
+                        role = msgObj.getString("role"),
+                        content = msgObj.getString("content"),
+                        reasoningContent = if (msgObj.has("reasoningContent")) msgObj.getString("reasoningContent") else null,
+                        isError = msgObj.optBoolean("isError", false),
+                        id = msgId
+                    ))
+                }
+                loadedSessions.add(ChatSession(id, title, msgs, timestamp))
+            }
+            
+            sessions.clear()
+            sessions.addAll(loadedSessions.sortedByDescending { it.timestamp })
+            
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun saveSessions() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val jsonArray = JSONArray()
+                for (session in sessions) {
+                    val sessionObj = JSONObject()
+                    sessionObj.put("id", session.id)
+                    sessionObj.put("title", session.title)
+                    sessionObj.put("timestamp", session.timestamp)
+                    
+                    val msgsArray = JSONArray()
+                    for (msg in session.messages) {
+                        val msgObj = JSONObject()
+                        msgObj.put("role", msg.role)
+                        msgObj.put("content", msg.content)
+                        if (msg.reasoningContent != null) {
+                            msgObj.put("reasoningContent", msg.reasoningContent)
+                        }
+                        msgObj.put("isError", msg.isError)
+                        msgObj.put("id", msg.id)
+                        msgsArray.put(msgObj)
+                    }
+                    sessionObj.put("messages", msgsArray)
+                    jsonArray.put(sessionObj)
+                }
+                
+                FileWriter(sessionsFile).use { it.write(jsonArray.toString()) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -123,7 +276,6 @@ class AICodingViewModel(application: Application) : AndroidViewModel(application
             }
 
             var success = false
-            var usedEndpoint = ""
 
             for (endpoint in candidates) {
                 try {
@@ -144,12 +296,12 @@ class AICodingViewModel(application: Application) : AndroidViewModel(application
                     }
                     
                     if (!response.isSuccessful) {
-                        val errorMsg = response.body?.string() ?: "Unknown error"
+                        val errorMsg = response.body.string()
                         response.close()
                         throw IOException("Failed to fetch models: ${response.code} - $errorMsg")
                     }
                     
-                    val responseBody = response.body!!.string()
+                    val responseBody = response.body.string()
                     val json = JSONObject(responseBody)
                     val data = json.optJSONArray("data")
                     
@@ -180,7 +332,6 @@ class AICodingViewModel(application: Application) : AndroidViewModel(application
                         isFetchingModels = false
                     }
                     success = true
-                    usedEndpoint = endpoint
                     break // Stop after success
                     
                 } catch (e: Exception) {
@@ -215,6 +366,7 @@ class AICodingViewModel(application: Application) : AndroidViewModel(application
         }
 
         messages.add(ChatMessage("user", text))
+        updateCurrentSession()
         isLoading = true
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -223,12 +375,14 @@ class AICodingViewModel(application: Application) : AndroidViewModel(application
                 withContext(Dispatchers.Main) {
                     messages.add(ChatMessage("assistant", responseContent, reasoningContent))
                     isLoading = false
+                    updateCurrentSession()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
                     messages.add(ChatMessage("assistant", "Error: ${e.message}", isError = true))
                     isLoading = false
+                    updateCurrentSession()
                 }
             }
         }
@@ -237,6 +391,7 @@ class AICodingViewModel(application: Application) : AndroidViewModel(application
     fun clearChat() {
         messages.clear()
         messages.add(ChatMessage("assistant", "Chat history cleared."))
+        updateCurrentSession()
     }
 
     private fun callChatCompletionApi(): Pair<String, String?> {
@@ -294,11 +449,11 @@ class AICodingViewModel(application: Application) : AndroidViewModel(application
 
                 response.use { 
                     if (!it.isSuccessful) {
-                        val errorBody = it.body?.string()
+                        val errorBody = it.body.string()
                         throw IOException("API Call failed: ${it.code} - $errorBody")
                     }
 
-                    val responseBody = it.body!!.string()
+                    val responseBody = it.body.string()
                     val jsonResponse = JSONObject(responseBody)
                     
                     val choices = jsonResponse.optJSONArray("choices")

@@ -683,6 +683,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun searchPrev() { getActiveEditor()?.searcher?.gotoPrevious() }
     fun replaceCurrent(text: String) { getActiveEditor()?.searcher?.replaceCurrentMatch(text) }
     fun replaceAll(text: String) { getActiveEditor()?.searcher?.replaceAll(text) }
+
     fun stopSearch() { getActiveEditor()?.searcher?.stopSearch() }
 
     fun formatCode() {

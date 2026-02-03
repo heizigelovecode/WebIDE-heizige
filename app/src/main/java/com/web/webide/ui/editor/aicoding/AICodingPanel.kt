@@ -2,18 +2,16 @@ package com.web.webide.ui.editor.aicoding
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -44,7 +42,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -66,7 +63,7 @@ import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.filled.CropSquare
@@ -87,17 +84,25 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.delay
+
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.HorizontalDivider
+
+import androidx.compose.ui.draw.scale
 
 @Composable
 fun AICodingPanel(
@@ -107,6 +112,8 @@ fun AICodingPanel(
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     var showSettings by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
+    var inputText by remember { mutableStateOf("") }
 
     if (showSettings) {
         var newApiKey by remember { mutableStateOf(viewModel.apiKey) }
@@ -294,6 +301,17 @@ fun AICodingPanel(
         val dpToPx = { dp: Dp -> with(density) { dp.toPx() } }
         val pxToDp = { px: Float -> with(density) { px.toDp() } }
 
+        // Glow trigger state
+        var isHoveringBorder by remember { mutableStateOf(false) }
+        var isResizingLeft by remember { mutableStateOf(false) }
+        var isResizingRight by remember { mutableStateOf(false) }
+        
+        // Combined visibility state
+        val isInteractingWithBorder = state.isExpanded && (isHoveringBorder || isResizingLeft || isResizingRight)
+        
+        // Is actively resizing? Used to disable animations for instant feedback
+        val isResizing = isResizingLeft || isResizingRight
+
         // Initialize position to right side center if not set
         LaunchedEffect(Unit) {
             if (state.windowOffset == Offset.Zero) {
@@ -308,23 +326,40 @@ fun AICodingPanel(
         val transition = updateTransition(targetState = state.isExpanded, label = "WindowTransition")
 
         // Animation values
-        val width by transition.animateDp(
+        val expandProgress by transition.animateFloat(
             transitionSpec = { spring(stiffness = Spring.StiffnessLow) },
-            label = "width"
-        ) { expanded ->
-            if (expanded) {
-                if (state.isMaximized) layoutMaxWidth else state.windowWidth
-            } else 32.dp
-        }
+            label = "expandProgress"
+        ) { expanded -> if (expanded) 1f else 0f }
 
-        val height by transition.animateDp(
-            transitionSpec = { spring(stiffness = Spring.StiffnessLow) },
-            label = "height"
-        ) { expanded ->
-            if (expanded) {
-                if (state.isMaximized) layoutMaxHeight else state.windowHeight
-            } else 64.dp
-        }
+        // Calculate Target Size based on Maximized State
+        // We use animateDpAsState here to handle the Maximize/Restore animation
+        // BUT we switch to snap() spec when dragging to ensure instant feedback and avoid drift
+        val targetWidth = if (state.isMaximized) layoutMaxWidth else state.windowWidth
+        val targetHeight = if (state.isMaximized) layoutMaxHeight else state.windowHeight
+
+        val animatedTargetWidth by animateDpAsState(
+            targetValue = targetWidth,
+            animationSpec = if (isResizing) snap() else spring(stiffness = Spring.StiffnessLow),
+            label = "animatedWidth"
+        )
+
+        val animatedTargetHeight by animateDpAsState(
+            targetValue = targetHeight,
+            animationSpec = if (isResizing) snap() else spring(stiffness = Spring.StiffnessLow),
+            label = "animatedHeight"
+        )
+
+        val width = androidx.compose.ui.unit.lerp(
+            32.dp,
+            animatedTargetWidth,
+            expandProgress
+        )
+
+        val height = androidx.compose.ui.unit.lerp(
+            64.dp,
+            animatedTargetHeight,
+            expandProgress
+        )
         
         val alpha by transition.animateFloat(
             transitionSpec = { tween(300) },
@@ -372,6 +407,23 @@ fun AICodingPanel(
             targetValue = if (state.dockSide == DockSide.Right) 0f else 180f,
             animationSpec = spring(stiffness = Spring.StiffnessLow)
         )
+
+        // Glow trigger state - Defined at top of scope
+        // var isHoveringBorder by remember { mutableStateOf(false) }
+        // var isResizingLeft by remember { mutableStateOf(false) }
+        // var isResizingRight by remember { mutableStateOf(false) }
+        
+        // Combined visibility state
+        // val isInteractingWithBorder = isHoveringBorder || isResizingLeft || isResizingRight
+
+        // Trigger glow on expand
+        LaunchedEffect(state.isExpanded) {
+            if (state.isExpanded) {
+                isHoveringBorder = true
+                delay(1000) 
+                isHoveringBorder = false
+            }
+        }
         
         LaunchedEffect(state.isExpanded, state.dockSide, state.isMaximized) {
              if (state.isExpanded) {
@@ -421,80 +473,39 @@ fun AICodingPanel(
                 .offset { IntOffset(animX.value.roundToInt(), animY.value.roundToInt()) }
                 .size(width, height)
                 .alpha(alpha)
-                .oneShotGlow(
-                    trigger = state.isExpanded,
+                .borderGlow(
+                    show = isInteractingWithBorder,
                     topStart = currentTopStartRadius,
                     topEnd = currentTopEndRadius,
                     bottomEnd = currentBottomEndRadius,
                     bottomStart = currentBottomStartRadius
                 )
+                // Border Touch Detector for Glow and Resize Hints
                 .pointerInput(state.isExpanded) {
-                    if (!state.isExpanded) {
-                        // Custom drag handler to capture velocity for inertia
+                    if (state.isExpanded && !state.isMaximized) {
                         awaitPointerEventScope {
-                            val velocityTracker = VelocityTracker()
-                            
+                            var hideJob: Job? = null
                             while (true) {
-                                val down = awaitFirstDown(requireUnconsumed = false)
-                                state.isDragging = true
-                                velocityTracker.resetTracking()
+                                val event = awaitPointerEvent()
+                                val position = event.changes.first().position
+                                val widthPx = size.width
+                                val heightPx = size.height
+                                val borderWidth = 24.dp.toPx()
                                 
-                                var dragChanges = Offset.Zero
+                                val isNearBorder = position.x < borderWidth || 
+                                                   position.x > widthPx - borderWidth ||
+                                                   position.y < borderWidth || 
+                                                   position.y > heightPx - borderWidth
                                 
-                                drag(down.id) { change ->
-                                    change.consume()
-                                    velocityTracker.addPosition(change.uptimeMillis, change.position)
-                                    
-                                    val dragAmount = change.position - change.previousPosition
-                                    dragChanges += dragAmount
-                                    
-                                    scope.launch {
-                                        val currentW = dpToPx(width)
-                                        val currentH = dpToPx(height)
-                                        
-                                        val newX = (animX.value + dragAmount.x).coerceIn(0f, (maxWidthPx - currentW).coerceAtLeast(0f))
-                                        val newY = (animY.value + dragAmount.y).coerceIn(0f, (maxHeightPx - currentH).coerceAtLeast(0f))
-                                        
-                                        animX.snapTo(newX)
-                                        animY.snapTo(newY)
-                                        
-                                        val centerX = maxWidthPx / 2
-                                        val newSide = if (newX + (currentW / 2) > centerX) DockSide.Right else DockSide.Left
-                                        if (state.dockSide != newSide) {
-                                            state.dockSide = newSide
-                                        }
-                                    }
-                                }
-                                
-                                state.isDragging = false
-                                val velocity = velocityTracker.calculateVelocity()
-                                val velocityY = velocity.y
-                                
-                                // Final snap logic
-                                val centerX = maxWidthPx / 2
-                                val newSide = if (animX.value > centerX) DockSide.Right else DockSide.Left
-                                state.dockSide = newSide
-                                val targetX = if (newSide == DockSide.Right) maxWidthPx - dpToPx(32.dp) else 0f
-                                
-                                scope.launch {
-                                    launch {
-                                        animX.animateTo(
-                                            targetValue = targetX, 
-                                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                                        )
-                                    }
-                                    
-                                    launch {
-                                        // Inertia decay for Y
-                                        val decay = exponentialDecay<Float>(frictionMultiplier = 2f)
-                                        val currentH = dpToPx(height)
-                                        val maxY = maxHeightPx - currentH
-                                        
-                                        animY.updateBounds(lowerBound = 0f, upperBound = maxY)
-                                        try {
-                                            animY.animateDecay(velocityY, decay)
-                                        } finally {
-                                            animY.updateBounds(lowerBound = null, upperBound = null)
+                                if (isNearBorder) {
+                                    hideJob?.cancel()
+                                    isHoveringBorder = true
+                                } else {
+                                    // Delay hiding to prevent flickering when moving slightly out
+                                    if (hideJob == null || !hideJob.isActive) {
+                                        hideJob = scope.launch {
+                                            delay(1000)
+                                            isHoveringBorder = false
                                         }
                                     }
                                 }
@@ -542,20 +553,22 @@ fun AICodingPanel(
                                     )
                                 )
                                 .pointerInput(Unit) {
-                                    detectDragGestures { change, dragAmount ->
+                                    detectDragGestures(
+                                        onDragStart = { state.isDragging = true },
+                                        onDragEnd = { state.isDragging = false },
+                                        onDragCancel = { state.isDragging = false }
+                                    ) { change, dragAmount ->
                                         if (state.isMaximized) return@detectDragGestures
                                         change.consume()
                                         scope.launch {
                                             val currentW = dpToPx(width)
                                             val currentH = dpToPx(height)
-                                            val constrainedX = (animX.value + dragAmount.x).coerceIn(0f, (maxWidthPx - currentW).coerceAtLeast(0f))
-                                            val constrainedY = (animY.value + dragAmount.y).coerceIn(0f, (maxHeightPx - currentH).coerceAtLeast(0f))
                                             
-                                            animX.snapTo(constrainedX)
-                                            animY.snapTo(constrainedY)
+                                            val newX = (animX.value + dragAmount.x).coerceIn(0f, (maxWidthPx - currentW).coerceAtLeast(0f))
+                                            val newY = (animY.value + dragAmount.y).coerceIn(0f, (maxHeightPx - currentH).coerceAtLeast(0f))
                                             
-                                            // Update last known floating position
-                                            state.lastFloatingPosition = Offset(constrainedX, constrainedY)
+                                            animX.snapTo(newX)
+                                            animY.snapTo(newY)
                                         }
                                     }
                                 }
@@ -570,6 +583,19 @@ fun AICodingPanel(
                             
                             Spacer(modifier = Modifier.weight(1f))
                             
+                            // History/Session Button
+                            IconButton(
+                                onClick = { showHistory = !showHistory },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.List,
+                                    contentDescription = "History",
+                                    tint = if (showHistory) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
                             // Settings Button
                             IconButton(
                                 onClick = { showSettings = true },
@@ -614,41 +640,52 @@ fun AICodingPanel(
                                     imageVector = Icons.Default.KeyboardArrowDown,
                                     contentDescription = "Minimize",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
                         
-                        // Main Content Area
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surface)
-                        ) {
-                            var inputText by remember { mutableStateOf("") }
+                        // Content Area
+                        Column(modifier = Modifier.weight(1f)) {
+                            // Chat History
                             val listState = rememberLazyListState()
-
+                            
+                            // Auto-scroll to bottom when new messages arrive
                             LaunchedEffect(viewModel.messages.size) {
                                 if (viewModel.messages.isNotEmpty()) {
                                     listState.animateScrollToItem(viewModel.messages.size - 1)
                                 }
                             }
 
-                            // Messages List
                             LazyColumn(
                                 state = listState,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .fillMaxWidth()
-                                    .padding(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    .padding(horizontal = 16.dp),
+                                reverseLayout = false
                             ) {
-                                items(viewModel.messages) { message ->
+                                items(
+                                    items = viewModel.messages,
+                                    key = { it.id }
+                                ) { message ->
                                     val isUser = message.role == "user"
-                                    val isError = message.isError
+                                    val isError = message.role == "error"
+                                    
+                                    // Animation for new messages
+                                    val alphaAnim = remember { Animatable(0f) }
+                                    val offsetAnim = remember { Animatable(50f) }
+                                    
+                                    LaunchedEffect(Unit) {
+                                        launch { alphaAnim.animateTo(1f, spring(stiffness = Spring.StiffnessLow)) }
+                                        launch { offsetAnim.animateTo(0f, spring(stiffness = Spring.StiffnessMedium)) }
+                                    }
                                     
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp)
+                                            .alpha(alphaAnim.value)
+                                            .offset(y = offsetAnim.value.dp),
                                         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
                                     ) {
                                         Surface(
@@ -665,61 +702,58 @@ fun AICodingPanel(
                                             },
                                             modifier = Modifier.widthIn(max = 280.dp)
                                         ) {
-                                            SelectionContainer {
-                                                Column(modifier = Modifier.padding(12.dp)) {
-                                                    // Reasoning Content Section
-                                                    if (!message.reasoningContent.isNullOrBlank()) {
-                                                        var isThinkingExpanded by remember { mutableStateOf(false) }
+                                            Column(modifier = Modifier.padding(12.dp)) {
+                                                // Reasoning Content Section
+                                                    if (!message.reasoningContent.isNullOrEmpty()) {
+                                                        var isReasoningExpanded by remember { mutableStateOf(false) }
                                                         
                                                         Column(
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
                                                                 .padding(bottom = 8.dp)
                                                                 .background(
-                                                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
+                                                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                                                                     shape = RoundedCornerShape(8.dp)
                                                                 )
                                                                 .padding(8.dp)
                                                         ) {
                                                             Row(
-                                                                verticalAlignment = Alignment.CenterVertically,
                                                                 modifier = Modifier
                                                                     .fillMaxWidth()
-                                                                    .clickable { isThinkingExpanded = !isThinkingExpanded }
+                                                                    .clickable { isReasoningExpanded = !isReasoningExpanded },
+                                                                verticalAlignment = Alignment.CenterVertically
                                                             ) {
                                                                 Text(
-                                                                    text = "💭 Thinking Process",
+                                                                    text = "Thinking Process",
                                                                     style = MaterialTheme.typography.labelSmall,
-                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                                                    color = MaterialTheme.colorScheme.secondary,
                                                                     fontWeight = FontWeight.Bold
                                                                 )
                                                                 Spacer(modifier = Modifier.weight(1f))
                                                                 Icon(
-                                                                    imageVector = if (isThinkingExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                                                    contentDescription = if (isThinkingExpanded) "Collapse" else "Expand",
-                                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                                                    modifier = Modifier.size(16.dp)
+                                                                    imageVector = if (isReasoningExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                                    contentDescription = "Toggle Reasoning",
+                                                                    modifier = Modifier.size(16.dp),
+                                                                    tint = MaterialTheme.colorScheme.secondary
                                                                 )
                                                             }
                                                             
-                                                            if (isThinkingExpanded) {
-                                                                Spacer(modifier = Modifier.height(8.dp))
+                                                            if (isReasoningExpanded) {
+                                                                Spacer(modifier = Modifier.height(4.dp))
                                                                 Text(
                                                                     text = message.reasoningContent,
-                                                                    style = MaterialTheme.typography.bodySmall.copy(
-                                                                        fontFamily = FontFamily.Monospace,
-                                                                        fontSize = 11.sp
-                                                                    ),
-                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                    fontFamily = FontFamily.Monospace,
+                                                                    fontSize = 11.sp
                                                                 )
                                                             }
                                                         }
                                                     }
-
+                                                    
                                                     // Main Content
-                                                    Text(
-                                                        text = message.content,
-                                                        style = MaterialTheme.typography.bodyMedium,
+                                                    MarkdownText(
+                                                        markdown = message.content,
                                                         color = when {
                                                             isError -> MaterialTheme.colorScheme.onErrorContainer
                                                             isUser -> MaterialTheme.colorScheme.onPrimaryContainer
@@ -729,29 +763,15 @@ fun AICodingPanel(
                                                 }
                                             }
                                         }
-                                    }
-                                }
-                                
-                                if (viewModel.isLoading) {
-                                    item {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.Start
-                                        ) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(24.dp).padding(start = 8.dp),
-                                                strokeWidth = 2.dp
-                                            )
-                                        }
-                                    }
                                 }
                             }
-
+                            
                             // Input Area
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(8.dp),
+                                    // Add extra bottom padding to prevent overlap with the gesture bar
+                                    .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 36.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 OutlinedTextField(
@@ -766,6 +786,9 @@ fun AICodingPanel(
                                 
                                 Spacer(modifier = Modifier.width(8.dp))
                                 
+                                val isSending = viewModel.isLoading
+                                val sendScale by animateFloatAsState(if (isSending) 0.8f else 1f)
+                                
                                 IconButton(
                                     onClick = {
                                         if (inputText.isNotBlank()) {
@@ -776,62 +799,140 @@ fun AICodingPanel(
                                     enabled = !viewModel.isLoading && inputText.isNotBlank(),
                                     modifier = Modifier
                                         .size(48.dp)
-                                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                        .scale(sendScale) // Scale animation on click
+                                        .background(
+                                            color = if (isSending) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary, 
+                                            shape = CircleShape
+                                        )
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.Send,
-                                        contentDescription = "Send",
-                                        tint = MaterialTheme.colorScheme.onPrimary
-                                    )
+                                    if (isSending) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.Send,
+                                            contentDescription = "Send",
+                                            tint = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                     
-                    // Custom Resize Handle
+                    // History Overlay
+                    if (showHistory) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = 48.dp) // Below Title Bar
+                                .zIndex(10f),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 4.dp
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Button(
+                                    onClick = { 
+                                        viewModel.createNewSession()
+                                        showHistory = false 
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("New Chat")
+                                }
+                                
+                                HorizontalDivider()
+                                
+                                LazyColumn(modifier = Modifier.weight(1f)) {
+                                    items(
+                                        items = viewModel.sessions,
+                                        key = { it.id }
+                                    ) { session ->
+                                        val isSelected = session.id == viewModel.currentSessionId
+                                        ListItem(
+                                            headlineContent = { 
+                                                Text(
+                                                    session.title, 
+                                                    maxLines = 1, 
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                ) 
+                                            },
+                                            supportingContent = { 
+                                                Text(
+                                                    java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
+                                                        .format(java.util.Date(session.timestamp)),
+                                                    style = MaterialTheme.typography.bodySmall
+                                                ) 
+                                            },
+                                            modifier = Modifier
+                                                .clickable { 
+                                                    viewModel.loadSession(session.id)
+                                                    showHistory = false 
+                                                }
+                                                .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent),
+                                            trailingContent = {
+                                                IconButton(onClick = { viewModel.deleteSession(session.id) }) {
+                                                    Icon(
+                                                        Icons.Default.Delete, 
+                                                        contentDescription = "Delete",
+                                                        tint = MaterialTheme.colorScheme.error
+                                                    )
+                                                }
+                                            }
+                                        )
+                                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Gesture Navigation Indicator (Interactive)
                     Box(
                         modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(24.dp)
+                            .align(Alignment.BottomCenter)
+                            // Maximize touch width to 80% of window and decent height
+                            .fillMaxWidth(0.8f)
+                            .height(32.dp) 
                             .pointerInput(Unit) {
                                 detectDragGestures { change, dragAmount ->
                                     if (state.isMaximized) return@detectDragGestures
                                     change.consume()
-                                    // Remove upper limit as requested for unrestricted resizing
-                                    val newW = (state.windowWidth + pxToDp(dragAmount.x)).coerceAtLeast(200.dp)
-                                    val newH = (state.windowHeight + pxToDp(dragAmount.y)).coerceAtLeast(200.dp)
-                                    state.windowWidth = newW
-                                    state.windowHeight = newH
+                                    scope.launch {
+                                        val currentW = dpToPx(width)
+                                        val currentH = dpToPx(height)
+                                        val constrainedX = (animX.value + dragAmount.x).coerceIn(0f, (maxWidthPx - currentW).coerceAtLeast(0f))
+                                        val constrainedY = (animY.value + dragAmount.y).coerceIn(0f, (maxHeightPx - currentH).coerceAtLeast(0f))
+                                        
+                                        animX.snapTo(constrainedX)
+                                        animY.snapTo(constrainedY)
+                                        
+                                        // Update last known floating position
+                                        state.lastFloatingPosition = Offset(constrainedX, constrainedY)
+                                    }
                                 }
-                            }
-                            .drawBehind {
-                                val strokeWidth = 2.dp.toPx()
-                                val color = Color.Gray.copy(alpha = 0.6f)
-                                
-                                // Draw stylish diagonal grip lines
-                                val spacing = 5.dp.toPx()
-                                val sizePx = size.width
-                                
-                                // Draw 3 lines with increasing length
-                                for (i in 0..2) {
-                                    // Start from bottom-right, go up-left
-                                    // Line 1 (smallest, closest to corner)
-                                    // Line 3 (largest, furthest from corner)
-                                    val startX = sizePx - (spacing * (i + 1))
-                                    val startY = size.height
-                                    val endX = sizePx
-                                    val endY = size.height - (spacing * (i + 1))
-                                    
-                                    drawLine(
-                                        color = color,
-                                        start = Offset(startX, startY),
-                                        end = Offset(endX, endY),
-                                        strokeWidth = strokeWidth,
-                                        cap = StrokeCap.Round
-                                    )
-                                }
-                            }
-                    )
+                            },
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        // The visible indicator bar
+                        Box(
+                            modifier = Modifier
+                                .padding(bottom = 8.dp) // Visual offset
+                                .width(80.dp) // Slightly wider visual bar
+                                .height(5.dp) // Slightly thicker
+                                .background(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    shape = CircleShape
+                                )
+                        )
+                    }
                     }
                 } else {
                     // Collapsed Content
@@ -846,12 +947,207 @@ fun AICodingPanel(
                 }
             }
         }
+
+        // Dynamic Resize Handles (Bottom Left & Right) - MOVED OUTSIDE WINDOW BOX TO PREVENT CLIPPING
+        if (state.isExpanded) {
+            val handleSize = 64.dp
+            val handleSizePx = dpToPx(handleSize)
+            val windowX = animX.value
+            val windowY = animY.value
+            val windowW = dpToPx(width)
+            val windowH = dpToPx(height)
+
+            // Bottom Right Handle
+            Box(
+                modifier = Modifier
+                    .offset { 
+                        IntOffset(
+                            x = (windowX + windowW - handleSizePx / 2).roundToInt(),
+                            y = (windowY + windowH - handleSizePx / 2).roundToInt()
+                        )
+                    }
+                    .size(handleSize)
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { isResizingRight = true },
+                            onDragEnd = { isResizingRight = false },
+                            onDragCancel = { isResizingRight = false }
+                        ) { change, dragAmount ->
+                            if (state.isMaximized) return@detectDragGestures
+                            change.consume()
+                            val newW = (state.windowWidth + pxToDp(dragAmount.x)).coerceAtLeast(200.dp)
+                            val newH = (state.windowHeight + pxToDp(dragAmount.y)).coerceAtLeast(200.dp)
+                            state.windowWidth = newW
+                            state.windowHeight = newH
+                        }
+                    }
+                    .drawBehind {
+                        // Show if hovering OR resizing this side, BUT hide if resizing the OTHER side
+                        val shouldShow = (isHoveringBorder || isResizingRight) && !isResizingLeft
+                        
+                        if (shouldShow) {
+                            val strokeWidth = 5.dp.toPx()
+                            val color = Color.White
+                            
+                            // Visual parameters
+                            val gap = 4.dp.toPx() // Distance from window corner
+                            val handleLength = 24.dp.toPx()
+                            // Dynamic corner radius following the window
+                            val cornerRadius = currentBottomEndRadius.toPx()
+                            // Calculate effective outer radius for concentric wrapping
+                            // If window has radius R, outer curve at distance G should have radius R + G
+                            val effectiveRadius = if (cornerRadius > 0) cornerRadius + gap else 0f
+                            
+                            // Center of the box is the Window Corner
+                            val cx = size.width / 2
+                            val cy = size.height / 2
+                            
+                            // Draw L-shape wrapping Bottom-Right corner
+                            // Vertical line from top
+                            val startY = cy - handleLength
+                            val verticalX = cx + gap
+                            
+                            val path = Path().apply {
+                                moveTo(verticalX, startY)
+                                lineTo(verticalX, cy + gap - effectiveRadius)
+                                // Arc around the corner
+                                if (effectiveRadius > 0) {
+                                    quadraticTo(
+                                        verticalX,
+                                        cy + gap,
+                                        verticalX - effectiveRadius,
+                                        cy + gap
+                                    )
+                                } else {
+                                    lineTo(verticalX, cy + gap)
+                                    lineTo(verticalX, cy + gap) // Sharp corner
+                                }
+                                // Horizontal line to left
+                                lineTo(cx - handleLength, cy + gap)
+                            }
+                            
+                            drawPath(
+                                path = path,
+                                color = color,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+                        }
+                    }
+            )
+
+            // Bottom Left Handle
+            Box(
+                modifier = Modifier
+                    .offset { 
+                        IntOffset(
+                            x = (windowX - handleSizePx / 2).roundToInt(),
+                            y = (windowY + windowH - handleSizePx / 2).roundToInt()
+                        )
+                    }
+                    .size(handleSize)
+                    .pointerInput(Unit) {
+                        var initialX = 0f
+                        var initialWidthPx = 0f
+                        var totalDragX = 0f
+                        
+                        detectDragGestures(
+                            onDragStart = { 
+                                isResizingLeft = true
+                                initialX = animX.value
+                                initialWidthPx = dpToPx(state.windowWidth)
+                                totalDragX = 0f
+                            },
+                            onDragEnd = { isResizingLeft = false },
+                            onDragCancel = { isResizingLeft = false }
+                        ) { change, dragAmount ->
+                            if (state.isMaximized) return@detectDragGestures
+                            change.consume()
+                            
+                            totalDragX += dragAmount.x
+                            val minWidthPx = dpToPx(200.dp)
+                            
+                            // Calculate target state based on initial state + accumulation
+                            // This prevents rounding errors from accumulating frame-by-frame
+                            var targetWidthPx = initialWidthPx - totalDragX
+                            var targetX = initialX + totalDragX
+                            
+                            if (targetWidthPx < minWidthPx) {
+                                // Constrain logic
+                                targetWidthPx = minWidthPx
+                                // If width is constrained, X must be anchored to the Right Edge
+                                // Right Edge = InitialX + InitialWidth
+                                targetX = (initialX + initialWidthPx) - minWidthPx
+                            }
+                            
+                            // Apply updates
+                            state.windowWidth = pxToDp(targetWidthPx)
+                            // Height logic remains simple delta-based for now as it doesn't affect anchoring
+                            state.windowHeight = (state.windowHeight + pxToDp(dragAmount.y)).coerceAtLeast(200.dp)
+                            
+                            scope.launch {
+                                animX.snapTo(targetX)
+                            }
+                        }
+                    }
+                    .drawBehind {
+                        // Show if hovering OR resizing this side, BUT hide if resizing the OTHER side
+                        val shouldShow = (isHoveringBorder || isResizingLeft) && !isResizingRight
+
+                        if (shouldShow) {
+                            val strokeWidth = 5.dp.toPx()
+                            val color = Color.White
+                            
+                            // Visual parameters
+                            val gap = 4.dp.toPx()
+                            val handleLength = 24.dp.toPx()
+                            // Dynamic corner radius following the window
+                            val cornerRadius = currentBottomStartRadius.toPx()
+                            // Calculate effective outer radius for concentric wrapping
+                            val effectiveRadius = if (cornerRadius > 0) cornerRadius + gap else 0f
+                            
+                            // Center of the box is the Window Corner
+                            val cx = size.width / 2
+                            val cy = size.height / 2
+                            
+                            // Draw L-shape wrapping Bottom-Left corner
+                            // Vertical line from top
+                            val startY = cy - handleLength
+                            val verticalX = cx - gap
+                            
+                            val path = Path().apply {
+                                moveTo(verticalX, startY)
+                                lineTo(verticalX, cy + gap - effectiveRadius)
+                                // Arc around the corner (curving right)
+                                if (effectiveRadius > 0) {
+                                    quadraticTo(
+                                        verticalX,
+                                        cy + gap,
+                                        verticalX + effectiveRadius,
+                                        cy + gap
+                                    )
+                                } else {
+                                    lineTo(verticalX, cy + gap)
+                                    lineTo(verticalX, cy + gap) // Sharp corner
+                                }
+                                // Horizontal line to right
+                                lineTo(cx + handleLength, cy + gap)
+                            }
+                            
+                            drawPath(
+                                path = path,
+                                color = color,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+                        }
+                    }
+            )
+        }
     }
 }
 
-// One-shot Glow Effect
-fun Modifier.oneShotGlow(
-    trigger: Boolean,
+// Continuous Glow Effect
+fun Modifier.borderGlow(
+    show: Boolean,
     topStart: Dp,
     topEnd: Dp,
     bottomEnd: Dp,
@@ -861,21 +1157,23 @@ fun Modifier.oneShotGlow(
     val alphaAnim = remember { Animatable(0f) }
     val rotateAnim = remember { Animatable(0f) }
     
-    LaunchedEffect(trigger) {
-        if (trigger) {
-            alphaAnim.snapTo(1f)
-            rotateAnim.snapTo(0f)
-            
-            // Play briefly: Rotate 2 loops over 2s, then fade out
+    // Manage visibility and rotation
+    LaunchedEffect(show) {
+        if (show) {
+            // Fade in
+            launch { alphaAnim.animateTo(1f, tween(300)) }
+            // Continuous rotation
             launch {
-                delay(1500)
-                alphaAnim.animateTo(0f, tween(500))
-            }
-            launch {
-                rotateAnim.animateTo(720f, tween(2000, easing = LinearEasing))
+                while (true) {
+                    rotateAnim.animateTo(
+                        targetValue = rotateAnim.value + 360f,
+                        animationSpec = tween(2000, easing = LinearEasing)
+                    )
+                }
             }
         } else {
-            alphaAnim.snapTo(0f)
+            // Fade out
+            alphaAnim.animateTo(0f, tween(500))
         }
     }
     
@@ -907,8 +1205,6 @@ fun Modifier.oneShotGlow(
                 )
             }
             
-            // Create a SweepGradient shader and rotate it using a local matrix.
-            // This rotates the *colors* around the center, while keeping the *path* (border shape) stationary.
             val shader = android.graphics.SweepGradient(
                 center.x,
                 center.y,
@@ -928,5 +1224,3 @@ fun Modifier.oneShotGlow(
         }
     }
 }
-
-

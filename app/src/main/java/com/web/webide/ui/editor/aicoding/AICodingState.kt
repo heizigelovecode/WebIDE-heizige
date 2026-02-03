@@ -10,7 +10,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 
 enum class DockSide {
-    Left, Right
+    Right
 }
 
 @Stable
