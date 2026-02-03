@@ -186,14 +186,11 @@ fun AICodingPanel(
                      val targetX: Float
                      val targetY: Float
                      
-                     if (state.lastFloatingPosition != null) {
-                         targetX = state.lastFloatingPosition!!.x
-                         targetY = state.lastFloatingPosition!!.y
-                     } else {
-                         // Default to Horizontal Center, Vertical follows Tab
-                         targetX = (maxWidthPx - targetW) / 2f
-                         targetY = animY.value
-                     }
+                     // Always Default to Horizontal Center, Vertical follows Tab (Inertia friendly)
+                     // We intentionally ignore lastFloatingPosition for X to ensure it always centers nicely on open
+                     // unless the user is dragging it RIGHT NOW (which is handled by drag logic, not here)
+                     targetX = (maxWidthPx - targetW) / 2f
+                     targetY = animY.value
                      
                      // Ensure within bounds
                      val constrainedX = targetX.coerceIn(0f, maxWidthPx - targetW)
