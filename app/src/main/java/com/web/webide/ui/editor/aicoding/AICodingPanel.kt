@@ -12,6 +12,8 @@ import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -42,6 +44,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -52,6 +55,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -522,6 +526,80 @@ fun AICodingPanel(
                         }
                     )
                 }
+                .pointerInput(state.isExpanded) {
+                    if (!state.isExpanded) {
+                        // Custom drag handler to capture velocity for inertia
+                        awaitPointerEventScope {
+                            val velocityTracker = VelocityTracker()
+                            
+                            while (true) {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                state.isDragging = true
+                                velocityTracker.resetTracking()
+                                
+                                var dragChanges = Offset.Zero
+                                
+                                drag(down.id) { change ->
+                                    change.consume()
+                                    velocityTracker.addPosition(change.uptimeMillis, change.position)
+                                    
+                                    val dragAmount = change.position - change.previousPosition
+                                    dragChanges += dragAmount
+                                    
+                                    scope.launch {
+                                        val currentW = dpToPx(width)
+                                        val currentH = dpToPx(height)
+                                        
+                                        val newX = (animX.value + dragAmount.x).coerceIn(0f, maxWidthPx - currentW)
+                                        val newY = (animY.value + dragAmount.y).coerceIn(0f, maxHeightPx - currentH)
+                                        
+                                        animX.snapTo(newX)
+                                        animY.snapTo(newY)
+                                        
+                                        val centerX = maxWidthPx / 2
+                                        val newSide = if (newX + (currentW / 2) > centerX) DockSide.Right else DockSide.Left
+                                        if (state.dockSide != newSide) {
+                                            state.dockSide = newSide
+                                        }
+                                    }
+                                }
+                                
+                                state.isDragging = false
+                                val velocity = velocityTracker.calculateVelocity()
+                                val velocityY = velocity.y
+                                
+                                // Final snap logic
+                                val centerX = maxWidthPx / 2
+                                val newSide = if (animX.value > centerX) DockSide.Right else DockSide.Left
+                                state.dockSide = newSide
+                                val targetX = if (newSide == DockSide.Right) maxWidthPx - dpToPx(32.dp) else 0f
+                                
+                                scope.launch {
+                                    launch {
+                                        animX.animateTo(
+                                            targetValue = targetX, 
+                                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                        )
+                                    }
+                                    
+                                    launch {
+                                        // Inertia decay for Y
+                                        val decay = exponentialDecay<Float>(frictionMultiplier = 2f)
+                                        val currentH = dpToPx(height)
+                                        val maxY = maxHeightPx - currentH
+                                        
+                                        animY.updateBounds(lowerBound = 0f, upperBound = maxY)
+                                        try {
+                                            animY.animateDecay(velocityY, decay)
+                                        } finally {
+                                            animY.updateBounds(lowerBound = null, upperBound = null)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
         ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
@@ -532,8 +610,8 @@ fun AICodingPanel(
                     bottomStart = currentBottomStartRadius
                 ),
                 color = if (state.isExpanded) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.primaryContainer,
-                tonalElevation = 8.dp,
-                shadowElevation = 8.dp
+                tonalElevation = if (state.isExpanded) 8.dp else 0.dp,
+                shadowElevation = if (state.isExpanded) 8.dp else 0.dp
             ) {
                 if (state.isExpanded) {
                     // Expanded Content
