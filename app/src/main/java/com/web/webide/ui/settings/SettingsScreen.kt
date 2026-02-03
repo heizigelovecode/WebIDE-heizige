@@ -109,6 +109,7 @@ fun SettingsScreen(
     var codeFolding by remember { mutableStateOf(prefs.getBoolean("editor_code_folding", true)) }
     var showToolbar by remember { mutableStateOf(prefs.getBoolean("editor_show_toolbar", true)) }
     var lspEnabled by remember { mutableStateOf(prefs.getBoolean("editor_lsp_enabled", false)) }
+    var aiEnabled by remember { mutableStateOf(prefs.getBoolean("editor_ai_enabled", true)) }
     var fontPath by remember { mutableStateOf(prefs.getString("editor_font_path", "") ?: "") }
     var customSymbols by remember { mutableStateOf(prefs.getString("editor_custom_symbols", "Tab,<,>,/,=,\",',!,?,;,:,{,},[,],(,),+,-,*,_,&,|") ?: "") }
     var autoSaveInterval by remember { mutableLongStateOf(generalPrefs.getLong("auto_save_interval", 0L)) }
@@ -117,7 +118,7 @@ fun SettingsScreen(
     var previousLspEnabled by remember { mutableStateOf(lspEnabled) }
 
     // 自动保存
-    LaunchedEffect(tabWidth, wordWrap, showInvisibles, codeFolding, showToolbar, lspEnabled, fontPath, customSymbols) {
+    LaunchedEffect(tabWidth, wordWrap, showInvisibles, codeFolding, showToolbar, lspEnabled, aiEnabled, fontPath, customSymbols) {
         prefs.edit {
             putFloat("editor_font_size", fontSize)
             putInt("editor_tab_width", tabWidth)
@@ -126,6 +127,7 @@ fun SettingsScreen(
             putBoolean("editor_code_folding", codeFolding)
             putBoolean("editor_show_toolbar", showToolbar)
             putBoolean("editor_lsp_enabled", lspEnabled)
+            putBoolean("editor_ai_enabled", aiEnabled)
             putString("editor_font_path", fontPath)
             putString("editor_custom_symbols", customSymbols)
         }
@@ -186,6 +188,8 @@ fun SettingsScreen(
                     onShowToolbarChange = { showToolbar = it },
                     lspEnabled = lspEnabled,
                     onLspEnabledChange = { lspEnabled = it },
+                    isAiEnabled = aiEnabled,
+                    onIsAiEnabledChange = { aiEnabled = it },
                     fontPath = fontPath,
                     onFontPathChange = { fontPath = it },
                     customSymbols = customSymbols,
@@ -340,6 +344,8 @@ fun EditorSettingsItem(
     onShowToolbarChange: (Boolean) -> Unit,
     lspEnabled: Boolean,
     onLspEnabledChange: (Boolean) -> Unit,
+    isAiEnabled: Boolean,
+    onIsAiEnabledChange: (Boolean) -> Unit,
     fontPath: String,
     onFontPathChange: (String) -> Unit,
     customSymbols: String,
@@ -419,6 +425,7 @@ fun EditorSettingsItem(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text("智能辅助", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    CompactSwitchRow("AI 编程助手", isAiEnabled, onIsAiEnabledChange)
                     CompactSwitchRow("LSP 代码补全", lspEnabled, onLspEnabledChange)
                     Spacer(modifier = Modifier.height(24.dp))
 

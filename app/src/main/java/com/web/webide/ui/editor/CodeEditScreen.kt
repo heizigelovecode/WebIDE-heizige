@@ -108,6 +108,11 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
 
     // 1. 定义状态来持有自动保存的时间间隔
     var autoSaveInterval by remember { mutableLongStateOf(0L) }
+    // 🔥 优化：在初始化时直接读取 SharedPreferences，避免闪烁
+    var isAiEnabled by remember {
+        val editorPrefs = context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE)
+        mutableStateOf(editorPrefs.getBoolean("editor_ai_enabled", true))
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     // 2. 监听生命周期：当从设置页返回时，重新读取 SharedPreferences
     DisposableEffect(lifecycleOwner) {
@@ -115,6 +120,9 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
             if (event == Lifecycle.Event.ON_RESUME) {
                 val prefs = context.getSharedPreferences("WebIDE_Settings", Context.MODE_PRIVATE)
                 autoSaveInterval = prefs.getLong("auto_save_interval", 0L)
+
+                val editorPrefs = context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE)
+                isAiEnabled = editorPrefs.getBoolean("editor_ai_enabled", true)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -573,7 +581,9 @@ fun CodeEditScreen(folderName: String, navController: NavController, viewModel: 
                             }
                         }
                         
-                        AICodingPanel()
+                        if (isAiEnabled) {
+                            AICodingPanel()
+                        }
                     }
                 }
             )
