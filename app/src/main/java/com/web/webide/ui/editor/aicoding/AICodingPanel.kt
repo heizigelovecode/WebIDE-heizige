@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,6 +49,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -71,14 +71,214 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.foundation.shape.CircleShape
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun AICodingPanel(
-    state: AICodingState = rememberAICodingState()
+    state: AICodingState = rememberAICodingState(),
+    viewModel: AICodingViewModel = viewModel()
 ) {
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
+    var showSettings by remember { mutableStateOf(false) }
+
+    if (showSettings) {
+        var newApiKey by remember { mutableStateOf(viewModel.apiKey) }
+        var newBaseUrl by remember { mutableStateOf(viewModel.baseUrl) }
+        var newModel by remember { mutableStateOf(viewModel.model) }
+        var selectedProvider by remember { mutableStateOf(AICodingViewModel.ApiProvider.fromUrl(viewModel.baseUrl)) }
+
+        AlertDialog(
+            onDismissRequest = { showSettings = false },
+            title = { Text("AI Assistant Settings") },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Provider Selection
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        var expanded by remember { mutableStateOf(false) }
+                        OutlinedTextField(
+                            value = selectedProvider.displayName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Provider (Preset)") },
+                            trailingIcon = {
+                                IconButton(onClick = { expanded = !expanded }) {
+                                    Icon(Icons.Default.ArrowDropDown, "Select Provider")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        // Invisible clickable overlay to ensure the whole field triggers dropdown
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .alpha(0f)
+                                .clickable { expanded = true }
+                        )
+                        
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false },
+                            modifier = Modifier.heightIn(max = 300.dp)
+                        ) {
+                            AICodingViewModel.ApiProvider.entries.forEach { provider ->
+                                DropdownMenuItem(
+                                    text = { Text(provider.displayName) },
+                                    onClick = {
+                                        selectedProvider = provider
+                                        expanded = false
+                                        if (provider != AICodingViewModel.ApiProvider.CUSTOM) {
+                                            newBaseUrl = provider.defaultBaseUrl
+                                            newModel = provider.defaultModel
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = newApiKey,
+                        onValueChange = { newApiKey = it },
+                        label = { Text("API Key") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = newBaseUrl,
+                        onValueChange = { 
+                            newBaseUrl = it 
+                            // Check if custom or matches a provider
+                            val matched = AICodingViewModel.ApiProvider.fromUrl(it)
+                            selectedProvider = if (matched != AICodingViewModel.ApiProvider.CUSTOM) {
+                                matched
+                            } else {
+                                AICodingViewModel.ApiProvider.CUSTOM
+                            }
+                        },
+                        label = { Text("Base URL") },
+                        placeholder = { Text("https://api.openai.com/v1") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    
+                    // Model Selection with Dropdown and Fetch
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            var expanded by remember { mutableStateOf(false) }
+                            
+                            OutlinedTextField(
+                                value = newModel,
+                                onValueChange = { newModel = it },
+                                label = { Text("Model") },
+                                placeholder = { Text("gpt-3.5-turbo") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                trailingIcon = {
+                                    IconButton(onClick = { expanded = true }) {
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Model")
+                                    }
+                                }
+                            )
+                            
+                            DropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false },
+                                modifier = Modifier.heightIn(max = 200.dp)
+                            ) {
+                                if (viewModel.availableModels.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("No models found. Click Refresh (🔄)") },
+                                        onClick = { expanded = false }
+                                    )
+                                } else {
+                                    viewModel.availableModels.forEach { modelName ->
+                                        DropdownMenuItem(
+                                            text = { Text(modelName) },
+                                            onClick = {
+                                                newModel = modelName
+                                                expanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
+                        IconButton(
+                            onClick = { viewModel.fetchModels() },
+                            enabled = !viewModel.isFetchingModels
+                        ) {
+                            if (viewModel.isFetchingModels) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.Refresh, contentDescription = "Fetch Models")
+                            }
+                        }
+                    }
+                    
+                    Button(
+                        onClick = { viewModel.clearChat() },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                         Text("Clear Chat History")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.updateSettings(newApiKey, newBaseUrl, newModel)
+                        showSettings = false
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSettings = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -190,8 +390,8 @@ fun AICodingPanel(
                      val targetY: Float = animY.value
                      
                      // Ensure within bounds
-                     val constrainedX = targetX.coerceIn(0f, maxWidthPx - targetW)
-                     val constrainedY = targetY.coerceIn(0f, maxHeightPx - targetH)
+                     val constrainedX = targetX.coerceIn(0f, (maxWidthPx - targetW).coerceAtLeast(0f))
+                     val constrainedY = targetY.coerceIn(0f, (maxHeightPx - targetH).coerceAtLeast(0f))
                      
                      launch { animX.animateTo(constrainedX, spring(stiffness = Spring.StiffnessLow)) }
                      launch { animY.animateTo(constrainedY, spring(stiffness = Spring.StiffnessLow)) }
@@ -201,7 +401,7 @@ fun AICodingPanel(
                  // Only animate if NOT dragging (dragging controls offset directly)
                  if (!state.isDragging) {
                      val targetX = if (state.dockSide == DockSide.Right) maxWidthPx - dpToPx(32.dp) else 0f
-                     val targetY = state.windowOffset.y.coerceIn(0f, maxHeightPx - dpToPx(64.dp))
+                     val targetY = state.windowOffset.y.coerceIn(0f, (maxHeightPx - dpToPx(64.dp)).coerceAtLeast(0f))
                      launch { animX.animateTo(targetX, spring(stiffness = Spring.StiffnessLow)) }
                      launch { animY.animateTo(targetY, spring(stiffness = Spring.StiffnessLow)) }
                  }
@@ -252,8 +452,8 @@ fun AICodingPanel(
                                         val currentW = dpToPx(width)
                                         val currentH = dpToPx(height)
                                         
-                                        val newX = (animX.value + dragAmount.x).coerceIn(0f, maxWidthPx - currentW)
-                                        val newY = (animY.value + dragAmount.y).coerceIn(0f, maxHeightPx - currentH)
+                                        val newX = (animX.value + dragAmount.x).coerceIn(0f, (maxWidthPx - currentW).coerceAtLeast(0f))
+                                        val newY = (animY.value + dragAmount.y).coerceIn(0f, (maxHeightPx - currentH).coerceAtLeast(0f))
                                         
                                         animX.snapTo(newX)
                                         animY.snapTo(newY)
@@ -348,8 +548,8 @@ fun AICodingPanel(
                                         scope.launch {
                                             val currentW = dpToPx(width)
                                             val currentH = dpToPx(height)
-                                            val constrainedX = (animX.value + dragAmount.x).coerceIn(0f, maxWidthPx - currentW)
-                                            val constrainedY = (animY.value + dragAmount.y).coerceIn(0f, maxHeightPx - currentH)
+                                            val constrainedX = (animX.value + dragAmount.x).coerceIn(0f, (maxWidthPx - currentW).coerceAtLeast(0f))
+                                            val constrainedY = (animY.value + dragAmount.y).coerceIn(0f, (maxHeightPx - currentH).coerceAtLeast(0f))
                                             
                                             animX.snapTo(constrainedX)
                                             animY.snapTo(constrainedY)
@@ -383,6 +583,19 @@ fun AICodingPanel(
                             )
                             
                             Spacer(modifier = Modifier.weight(1f))
+                            
+                            // Settings Button
+                            IconButton(
+                                onClick = { showSettings = true },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Settings",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                             
                             // Maximize/Restore Button
                             IconButton(
@@ -420,12 +633,173 @@ fun AICodingPanel(
                             }
                         }
                         
-                        // Main Content Area (Empty as requested)
-                        Box(
+                        // Main Content Area
+                        Column(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(MaterialTheme.colorScheme.surface)
-                        )
+                        ) {
+                            var inputText by remember { mutableStateOf("") }
+                            val listState = rememberLazyListState()
+
+                            LaunchedEffect(viewModel.messages.size) {
+                                if (viewModel.messages.isNotEmpty()) {
+                                    listState.animateScrollToItem(viewModel.messages.size - 1)
+                                }
+                            }
+
+                            // Messages List
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(viewModel.messages) { message ->
+                                    val isUser = message.role == "user"
+                                    val isError = message.isError
+                                    
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+                                    ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(
+                                                topStart = 16.dp,
+                                                topEnd = 16.dp,
+                                                bottomStart = if (isUser) 16.dp else 4.dp,
+                                                bottomEnd = if (isUser) 4.dp else 16.dp
+                                            ),
+                                            color = when {
+                                                isError -> MaterialTheme.colorScheme.errorContainer
+                                                isUser -> MaterialTheme.colorScheme.primaryContainer
+                                                else -> MaterialTheme.colorScheme.secondaryContainer
+                                            },
+                                            modifier = Modifier.widthIn(max = 280.dp)
+                                        ) {
+                                            SelectionContainer {
+                                                Column(modifier = Modifier.padding(12.dp)) {
+                                                    // Reasoning Content Section
+                                                    if (!message.reasoningContent.isNullOrBlank()) {
+                                                        var isThinkingExpanded by remember { mutableStateOf(false) }
+                                                        
+                                                        Column(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(bottom = 8.dp)
+                                                                .background(
+                                                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
+                                                                    shape = RoundedCornerShape(8.dp)
+                                                                )
+                                                                .padding(8.dp)
+                                                        ) {
+                                                            Row(
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .clickable { isThinkingExpanded = !isThinkingExpanded }
+                                                            ) {
+                                                                Text(
+                                                                    text = "💭 Thinking Process",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                                                    fontWeight = FontWeight.Bold
+                                                                )
+                                                                Spacer(modifier = Modifier.weight(1f))
+                                                                Icon(
+                                                                    imageVector = if (isThinkingExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                                    contentDescription = if (isThinkingExpanded) "Collapse" else "Expand",
+                                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                                                    modifier = Modifier.size(16.dp)
+                                                                )
+                                                            }
+                                                            
+                                                            if (isThinkingExpanded) {
+                                                                Spacer(modifier = Modifier.height(8.dp))
+                                                                Text(
+                                                                    text = message.reasoningContent,
+                                                                    style = MaterialTheme.typography.bodySmall.copy(
+                                                                        fontFamily = FontFamily.Monospace,
+                                                                        fontSize = 11.sp
+                                                                    ),
+                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // Main Content
+                                                    Text(
+                                                        text = message.content,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = when {
+                                                            isError -> MaterialTheme.colorScheme.onErrorContainer
+                                                            isUser -> MaterialTheme.colorScheme.onPrimaryContainer
+                                                            else -> MaterialTheme.colorScheme.onSecondaryContainer
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                if (viewModel.isLoading) {
+                                    item {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.Start
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp).padding(start = 8.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Input Area
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = inputText,
+                                    onValueChange = { inputText = it },
+                                    modifier = Modifier.weight(1f),
+                                    placeholder = { Text("Ask anything...") },
+                                    singleLine = false,
+                                    maxLines = 3,
+                                    shape = RoundedCornerShape(24.dp)
+                                )
+                                
+                                Spacer(modifier = Modifier.width(8.dp))
+                                
+                                IconButton(
+                                    onClick = {
+                                        if (inputText.isNotBlank()) {
+                                            viewModel.sendMessage(inputText)
+                                            inputText = ""
+                                        }
+                                    },
+                                    enabled = !viewModel.isLoading && inputText.isNotBlank(),
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Send,
+                                        contentDescription = "Send",
+                                        tint = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                            }
+                        }
                     }
                     
                     // Custom Resize Handle
@@ -437,8 +811,8 @@ fun AICodingPanel(
                                 detectDragGestures { change, dragAmount ->
                                     if (state.isMaximized) return@detectDragGestures
                                     change.consume()
-                                    val newW = (state.windowWidth + pxToDp(dragAmount.x)).coerceIn(200.dp, layoutMaxWidth - 40.dp)
-                                    val newH = (state.windowHeight + pxToDp(dragAmount.y)).coerceIn(200.dp, layoutMaxHeight - 40.dp)
+                                    val newW = (state.windowWidth + pxToDp(dragAmount.x)).coerceIn(200.dp, (layoutMaxWidth - 40.dp).coerceAtLeast(200.dp))
+                                    val newH = (state.windowHeight + pxToDp(dragAmount.y)).coerceIn(200.dp, (layoutMaxHeight - 40.dp).coerceAtLeast(200.dp))
                                     state.windowWidth = newW
                                     state.windowHeight = newH
                                 }
