@@ -34,8 +34,8 @@ android {
         applicationId = "com.web.webide"
         minSdk = 29
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.2.3"
+        versionCode = 24
+        versionName = "0.2.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             //noinspection ChromeOsAbiSupport
@@ -63,7 +63,7 @@ android {
 
         release {
            // applicationIdSuffix = ".release"
-            versionNameSuffix = "-release-Preview"
+            versionNameSuffix = "-release"//-Preview
 
             isMinifyEnabled = true
             isShrinkResources = true // 资源缩减
