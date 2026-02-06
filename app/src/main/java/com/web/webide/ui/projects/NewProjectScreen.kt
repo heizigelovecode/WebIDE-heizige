@@ -97,6 +97,7 @@ fun NewProjectScreen(navController: NavController) {
     var packageName by remember { mutableStateOf("com.example.myapp") }
     var versionName by remember { mutableStateOf("1.0.0") }
     var versionCode by remember { mutableStateOf("1") }
+    var encryptionEnabled by remember { mutableStateOf(true) }
     var iconPath by remember { mutableStateOf("") }
 
     // [Display & Status Bar]
@@ -146,6 +147,7 @@ fun NewProjectScreen(navController: NavController) {
             root.put("package", packageName)
             root.put("versionName", versionName)
             root.put("versionCode", versionCode.toIntOrNull() ?: 1)
+            root.put("encryption", encryptionEnabled)
 
             val finalUrl = if (selectedType == ProjectType.WEBSITE) targetUrl else "index.html"
             root.put("targetUrl", finalUrl)
@@ -197,7 +199,9 @@ fun NewProjectScreen(navController: NavController) {
             jsonError = null
             isInternalUpdate = true
 
+            if(root.has("name")) projectName = root.optString("name")
             if(root.has("package")) packageName = root.optString("package")
+            if(root.has("encryption")) encryptionEnabled = root.optBoolean("encryption", true)
             if(root.has("versionName")) versionName = root.optString("versionName")
             if(root.has("versionCode")) versionCode = root.optInt("versionCode").toString()
 
@@ -445,6 +449,8 @@ fun NewProjectScreen(navController: NavController) {
                                     }
                                     Spacer(Modifier.height(8.dp))
                                     FileSelectorRow("应用图标", iconPath, { imageLauncher.launch("image/*") }, icon = Icons.Outlined.Image)
+                                    Spacer(Modifier.height(4.dp))
+                                    SwitchRow("资源加密 (HTML/JS/CSS)", encryptionEnabled) { encryptionEnabled = it; syncJsonFromUi() }
 
                                     ConfigSectionTitle("Display & Theme")
 

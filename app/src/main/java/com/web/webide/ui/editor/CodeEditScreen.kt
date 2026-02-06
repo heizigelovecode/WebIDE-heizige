@@ -1004,6 +1004,9 @@ private suspend fun performBuild(
     var customAlias: String? = null
     var customKeyPass: String? = null
 
+    // 加密配置 (默认为 true)
+    var enableEncryption = true
+
     if (configFile.exists()) {
         try {
             var jsonStr = withContext(Dispatchers.IO) {
@@ -1018,6 +1021,7 @@ private suspend fun performBuild(
             pkg = json.optString("package", pkg)
             verName = json.optString("versionName", verName)
             verCode = json.optString("versionCode", verCode)
+            enableEncryption = json.optBoolean("encryption", true)
 
             val iconName = json.optString("icon", "")
             if (iconName.isNotEmpty()) {
@@ -1073,6 +1077,7 @@ private suspend fun performBuild(
             iconPath,
             permissions,
             isDebug,
+            enableEncryption, // 🔥 传入加密配置
             // 🔥 传入解析出的签名参数 (如果上面没解析到，这些就是 null)
             customKeyPath,
             customStorePass,
