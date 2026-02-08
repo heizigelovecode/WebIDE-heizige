@@ -336,8 +336,8 @@ fun NewProjectScreen(navController: NavController) {
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(scrollState)
-                    .padding(horizontal = 24.dp)
-                    .animateContentSize(animationSpec = tween(300, easing = FastOutSlowInEasing)),
+                    .animateContentSize(animationSpec = tween(300, easing = FastOutSlowInEasing))
+                    .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Spacer(modifier = Modifier.height(10.dp))
@@ -345,10 +345,10 @@ fun NewProjectScreen(navController: NavController) {
                 // 类型选择
                 Text("项目类型", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
                 Spacer(modifier = Modifier.height(16.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    MinimalTypeCard("Web", Icons.Default.Html, selectedType == ProjectType.NORMAL) { selectedType = ProjectType.NORMAL }
-                    MinimalTypeCard("WebApp", Icons.Default.Android, selectedType == ProjectType.WEBAPP) { selectedType = ProjectType.WEBAPP }
-                    MinimalTypeCard("套壳", Icons.Default.Link, selectedType == ProjectType.WEBSITE) { selectedType = ProjectType.WEBSITE }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    MinimalTypeCard("Web", Icons.Default.Html, selectedType == ProjectType.NORMAL, Modifier.weight(1f)) { selectedType = ProjectType.NORMAL }
+                    MinimalTypeCard("WebApp", Icons.Default.Android, selectedType == ProjectType.WEBAPP, Modifier.weight(1f)) { selectedType = ProjectType.WEBAPP }
+                    MinimalTypeCard("套壳", Icons.Default.Link, selectedType == ProjectType.WEBSITE, Modifier.weight(1f)) { selectedType = ProjectType.WEBSITE }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -659,18 +659,17 @@ fun FileSelectorRow(label: String, path: String, onPick: () -> Unit, icon: Image
 
 // === 动画：项目类型卡片 (选中/未选中平滑过渡) ===
 @Composable
-fun MinimalTypeCard(title: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
+fun MinimalTypeCard(title: String, icon: ImageVector, isSelected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val bg by animateColorAsState(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow, label = "bg")
     val contentColor by animateColorAsState(if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant, label = "content")
     val scale by animateFloatAsState(if (isSelected) 1.05f else 1f, label = "scale")
 
     Column(
-        Modifier
+        modifier
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .width(100.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(bg)
             .clickable { onClick() }
