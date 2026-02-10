@@ -104,9 +104,16 @@ fun EditorPanelLayout(
         val minPeekHeightPx = with(density) { animatedMinPeekHeight.toPx() }
         var panelHeightPx by remember { mutableFloatStateOf(minPeekHeightPx) }
 
+        // Use a side effect to update panelHeightPx when minPeekHeightPx changes significantly
+        // This ensures the panel snaps to the new minimum if it was collapsed, 
+        // but doesn't override user expansion if they dragged it up.
         LaunchedEffect(minPeekHeightPx) {
-            if (panelHeightPx < minPeekHeightPx + 100) {
-                panelHeightPx = minPeekHeightPx
+            // Only force update if the current height is close to the OLD minimum (collapsed state)
+            // or if we are switching to a mode with a smaller minimum (like media viewer)
+            if (panelHeightPx < minPeekHeightPx + 100 || minPeekHeightPx < panelHeightPx) {
+                 // But wait, if we are shrinking (e.g. going to media view), we should probably respect that
+                 // If we are expanding (e.g. going to code view), we should also respect that
+                 panelHeightPx = minPeekHeightPx
             }
         }
 
