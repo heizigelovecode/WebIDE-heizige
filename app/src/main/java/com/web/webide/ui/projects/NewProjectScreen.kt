@@ -262,6 +262,7 @@ fun NewProjectScreen(navController: NavController) {
             targetUrl,
             selectedType,
             SigningConfig(enableSigning, keystorePath, keystoreAlias, storePassword, keyPassword),
+            iconPath,
             finalJsonContent = jsonContent,
             onSuccess = { dir ->
                 isLoading = false
@@ -711,7 +712,7 @@ fun CleanTextField(
 @OptIn(DelicateCoroutinesApi::class)
 private fun createNewProject(
     context: Context, name: String, url: String, type: ProjectType,
-    signing: SigningConfig, finalJsonContent: String,
+    signing: SigningConfig, iconPath: String, finalJsonContent: String,
     onSuccess: (File) -> Unit, onError: (String) -> Unit
 ) {
     val wsPath = WorkspaceManager.getWorkspacePath(context)
@@ -742,6 +743,10 @@ private fun createNewProject(
             if (type != ProjectType.NORMAL && signing.path.isNotBlank()) {
                 val ext = if (signing.path.endsWith(".jks", true)) ".jks" else ".keystore"
                 copyFile(signing.path, "keystore$ext")
+            }
+
+            if (type != ProjectType.NORMAL && iconPath.isNotBlank()) {
+                copyFile(iconPath, "icon.png")
             }
 
             when (type) {
