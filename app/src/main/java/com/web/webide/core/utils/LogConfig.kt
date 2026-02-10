@@ -155,40 +155,32 @@ object LogCatcher {
 
     @JvmStatic
     fun d(tag: String, message: String) {
-        if (shouldLog()) {
-            android.util.Log.d(tag, message)
-            writeToFile("DEBUG", tag, message)
-            emitLog("DEBUG", tag, message)
-        }
+        android.util.Log.d(tag, message)
+        emitLog("DEBUG", tag, message)
+        writeToFile("DEBUG", tag, message)
     }
 
     @JvmStatic
     fun i(tag: String, message: String) {
-        if (shouldLog()) {
-            android.util.Log.i(tag, message)
-            writeToFile("INFO", tag, message)
-            emitLog("INFO", tag, message)
-        }
+        android.util.Log.i(tag, message)
+        emitLog("INFO", tag, message)
+        writeToFile("INFO", tag, message)
     }
 
     @JvmStatic
     fun w(tag: String, message: String) {
-        if (shouldLog()) {
-            android.util.Log.w(tag, message)
-            writeToFile("WARN", tag, message)
-            emitLog("WARN", tag, message)
-        }
+        android.util.Log.w(tag, message)
+        emitLog("WARN", tag, message)
+        writeToFile("WARN", tag, message)
     }
 
     @JvmStatic
     @JvmOverloads
     fun e(tag: String, message: String, exception: Exception? = null) {
         android.util.Log.e(tag, message, exception)
-        if (shouldLog()) {
-            val msg = "$message${exception?.let { " - ${it.message}" } ?: ""}"
-            writeToFile("ERROR", tag, msg)
-            emitLog("ERROR", tag, msg)
-        }
+        val msg = "$message${exception?.let { " - ${it.message}" } ?: ""}"
+        emitLog("ERROR", tag, msg)
+        writeToFile("ERROR", tag, msg)
     }
 
     private fun emitLog(level: String, tag: String, message: String) {
@@ -200,10 +192,6 @@ object LogCatcher {
         }
         
         _logFlow.tryEmit(entry)
-    }
-
-    private fun shouldLog(): Boolean {
-        return isInitialized && logConfig?.isLogEnabled == true
     }
 
     @OptIn(DelicateCoroutinesApi::class)
