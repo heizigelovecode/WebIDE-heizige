@@ -19,7 +19,6 @@ package com.web.webide.ui.editor.components
 
 import android.annotation.SuppressLint
 import android.net.Uri
-import android.view.ContextThemeWrapper
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
@@ -87,7 +86,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import androidx.mediarouter.app.MediaRouteButton
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
@@ -422,18 +420,6 @@ private fun VideoPlayer(file: File) {
                         IconButton(onClick = { showInfoDialog = true }) {
                             Icon(Icons.Default.Info, contentDescription = "Info", tint = Color.White)
                         }
-
-                        // Cast Button
-                        AndroidView(
-                            factory = { ctx ->
-                                val contextWrapper = ContextThemeWrapper(ctx, androidx.appcompat.R.style.Theme_AppCompat)
-                                MediaRouteButton(contextWrapper).apply {
-                                    // Set tint to white if possible, but MediaRouteButton uses its own drawable.
-                                    // Usually requires a ContextThemeWrapper with mediaRouteButtonTint.
-                                }
-                            },
-                            modifier = Modifier.size(48.dp)
-                        )
 
                         // Resize Mode
                         Box {
