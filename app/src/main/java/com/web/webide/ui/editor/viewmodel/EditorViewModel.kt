@@ -154,6 +154,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     var openFiles by mutableStateOf<List<IEditorTab>>(emptyList())
         private set
+    
+    // History of closed files (Max 20)
+    var closedFilesHistory by mutableStateOf<List<IEditorTab>>(emptyList())
+        private set
 
     var activeFileIndex by mutableIntStateOf(-1)
         private set
@@ -540,6 +544,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (indexToClose !in openFiles.indices) return
         val tab = openFiles[indexToClose]
 
+        // Add to history (Limit to 20)
+        val newHistory = closedFilesHistory.toMutableList()
+        // Remove if already exists to move it to the top
+        newHistory.removeAll { it.file.absolutePath == tab.file.absolutePath }
+        newHistory.add(0, tab)
+        if (newHistory.size > 20) {
+            newHistory.removeAt(newHistory.lastIndex)
+        }
+        closedFilesHistory = newHistory
+
         if (tab is CodeEditorState) {
             try { tab.lspEditor?.dispose() } catch (_: Exception) {}
             editorInstances.remove(tab.file.absolutePath)?.release()
@@ -551,6 +565,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         } else if (activeFileIndex >= indexToClose) {
             activeFileIndex = (activeFileIndex - 1).coerceAtLeast(0)
         }
+    }
+
+    fun restoreClosedFile(tab: IEditorTab) {
+        // Remove from history
+        closedFilesHistory = closedFilesHistory.filter { it.file.absolutePath != tab.file.absolutePath }
+        // Open file
+        openFile(tab.file)
+    }
+
+    fun clearClosedHistory() {
+        closedFilesHistory = emptyList()
     }
 
     fun closeOtherFiles(indexToKeep: Int) {
@@ -610,6 +635,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun loadInitialFile(projectPath: String) {
         if (projectPath != currentProjectPath) {
             closeAllFiles()
+            clearClosedHistory() // Clear history when switching projects
             currentProjectPath = projectPath
             val indexFile = File(projectPath, "index.html")
             if (indexFile.exists()) openFile(indexFile)
@@ -716,26 +742,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun searchPrev() { getActiveEditor()?.searcher?.gotoPrevious() }
     fun replaceCurrent(text: String) { getActiveEditor()?.searcher?.replaceCurrentMatch(text) }
     fun replaceAll(text: String) { getActiveEditor()?.searcher?.replaceAll(text) }
-
-    fun refreshActiveFile() {
-        val state = openFiles.getOrNull(activeFileIndex) as? CodeEditorState ?: return
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                if (state.file.exists()) {
-                    val newContent = state.file.readText()
-                    withContext(Dispatchers.Main) {
-                        if (state.content != newContent) {
-                            state.content = newContent
-                            // Update editor view if attached
-                            editorInstances[state.file.absolutePath]?.setText(newContent)
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
 
     fun updateCodeWithUndo(newContent: String) {
         val editor = getActiveEditor() ?: return
