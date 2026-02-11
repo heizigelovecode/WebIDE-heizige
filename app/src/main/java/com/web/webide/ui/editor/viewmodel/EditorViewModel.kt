@@ -398,6 +398,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+
+
     private fun loadTreeSitterLanguage(context: Context, extension: String): TsLanguage? {
         try {
             val language: TSLanguage = when (extension) {
@@ -714,6 +716,57 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun searchPrev() { getActiveEditor()?.searcher?.gotoPrevious() }
     fun replaceCurrent(text: String) { getActiveEditor()?.searcher?.replaceCurrentMatch(text) }
     fun replaceAll(text: String) { getActiveEditor()?.searcher?.replaceAll(text) }
+
+    fun refreshActiveFile() {
+        val state = openFiles.getOrNull(activeFileIndex) as? CodeEditorState ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (state.file.exists()) {
+                    val newContent = state.file.readText()
+                    withContext(Dispatchers.Main) {
+                        if (state.content != newContent) {
+                            state.content = newContent
+                            // Update editor view if attached
+                            editorInstances[state.file.absolutePath]?.setText(newContent)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun updateCodeWithUndo(newContent: String) {
+        val editor = getActiveEditor() ?: return
+        viewModelScope.launch(Dispatchers.Main) {
+            val text = editor.text
+            // Replaces entire content while preserving undo history
+            try {
+                // Ensure we are deleting everything from (0,0) to the last character
+                val lastLineIndex = text.lineCount - 1
+                val lastColumnIndex = text.getColumnCount(lastLineIndex)
+                
+                // If the file is empty, just insert
+                if (text.length == 0) {
+                    text.insert(0, 0, newContent)
+                } else {
+                    text.replace(0, 0, lastLineIndex, lastColumnIndex, newContent)
+                }
+                
+                // Update the state as well, but rely on listener for content sync usually. 
+                // However, since we modify programmatically, the listener will trigger.
+                // We just need to ensure savedContent is updated if we consider this "saved" 
+                // but usually "undo" implies it's an edit in the buffer.
+                // If the user "Saved" in the config screen, they expect it to be on disk too.
+                // So we should also update savedContent to avoid "unsaved" indicator.
+                (openFiles.getOrNull(activeFileIndex) as? CodeEditorState)?.savedContent = newContent
+                
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     fun stopSearch() { getActiveEditor()?.searcher?.stopSearch() }
 
