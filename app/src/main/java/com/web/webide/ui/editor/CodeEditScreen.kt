@@ -765,64 +765,145 @@ fun EditCode(
 
     Column(modifier = modifier) {
         if (openFiles.isEmpty()) {
+            // History Menu for Empty State (Attached to the button)
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("未打开任何文件")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("未打开任何文件")
+                    if (viewModel.closedFilesHistory.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Box {
+                            TextButton(onClick = { expandedTabIndex = -2 }) {
+                                Icon(Icons.Default.History, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("恢复最近关闭")
+                            }
+                            
+                            DropdownMenu(
+                                expanded = expandedTabIndex == -2,
+                                onDismissRequest = { expandedTabIndex = null }
+                            ) {
+                                if (viewModel.closedFilesHistory.isEmpty()) {
+                                     DropdownMenuItem(
+                                        text = { Text("无最近关闭记录", color = MaterialTheme.colorScheme.secondary) },
+                                        onClick = { expandedTabIndex = null }
+                                    )
+                                } else {
+                                    DropdownMenuItem(
+                                        text = { Text("清空历史", color = MaterialTheme.colorScheme.error) },
+                                        onClick = { expandedTabIndex = null; viewModel.clearClosedHistory() }
+                                    )
+                                    HorizontalDivider()
+                                    viewModel.closedFilesHistory.forEach { tab ->
+                                        DropdownMenuItem(
+                                            text = { 
+                                                Column {
+                                                    Text(tab.title)
+                                                    Text(tab.file.parentFile?.name ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                                }
+                                            },
+                                            onClick = { expandedTabIndex = null; viewModel.restoreClosedFile(tab) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         } else {
-            SecondaryScrollableTabRow(
-                selectedTabIndex = pagerState.currentPage.coerceIn(0, openFiles.size - 1),
-                edgePadding = 0.dp,
-                divider = { },
-                indicator = {
-                    Box(
-                        modifier = Modifier
-                            .tabIndicatorOffset(pagerState.currentPage.coerceIn(0, openFiles.size - 1))
-                            .height(3.dp)
-                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(percent = 50))
-                    )
-                }
-            ) {
-                openFiles.forEachIndexed { index, tab ->
-                    Box {
-                        // 1. 获取标题
-                        val displayName = tab.title
+            Row(Modifier.fillMaxWidth()) {
+                SecondaryScrollableTabRow(
+                    selectedTabIndex = pagerState.currentPage.coerceIn(0, openFiles.size - 1),
+                    edgePadding = 0.dp,
+                    modifier = Modifier.weight(1f),
+                    divider = { },
+                    indicator = {
+                        Box(
+                            modifier = Modifier
+                                .tabIndicatorOffset(pagerState.currentPage.coerceIn(0, openFiles.size - 1))
+                                .height(3.dp)
+                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(percent = 50))
+                        )
+                    }
+                ) {
+                    openFiles.forEachIndexed { index, tab ->
+                        Box {
+                            // 1. 获取标题
+                            val displayName = tab.title
 
-                        // 2. 区分颜色 (Diff 模式显示不同颜色)
-                        val isDiff = tab is com.web.webide.ui.editor.viewmodel.DiffEditorState
-                        val tabColor = if (isDiff) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface
+                            // 2. 区分颜色 (Diff 模式显示不同颜色)
+                            val isDiff = tab is com.web.webide.ui.editor.viewmodel.DiffEditorState
+                            val tabColor = if (isDiff) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface
 
-                        Tab(
-                            selected = pagerState.currentPage == index,
-                            onClick = {
-                                if (pagerState.currentPage == index) expandedTabIndex = index
-                                else scope.launch { pagerState.animateScrollToPage(index) }
-                            },
-                            text = {
-                                Text(
-                                    text = displayName,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = if (pagerState.currentPage == index) MaterialTheme.colorScheme.primary else tabColor
+                            Tab(
+                                selected = pagerState.currentPage == index,
+                                onClick = {
+                                    if (pagerState.currentPage == index) expandedTabIndex = index
+                                    else scope.launch { pagerState.animateScrollToPage(index) }
+                                },
+                                text = {
+                                    Text(
+                                        text = displayName,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (pagerState.currentPage == index) MaterialTheme.colorScheme.primary else tabColor
+                                    )
+                                }
+                            )
+
+                            DropdownMenu(
+                                expanded = expandedTabIndex == index,
+                                onDismissRequest = { expandedTabIndex = null }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("关闭") },
+                                    onClick = { expandedTabIndex = null; viewModel.closeFile(index) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("关闭其他") },
+                                    onClick = { expandedTabIndex = null; viewModel.closeOtherFiles(index) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("关闭全部") },
+                                    onClick = { expandedTabIndex = null; viewModel.closeAllFiles() }
                                 )
                             }
-                        )
-
-                        DropdownMenu(
-                            expanded = expandedTabIndex == index,
-                            onDismissRequest = { expandedTabIndex = null }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("关闭") },
-                                onClick = { expandedTabIndex = null; viewModel.closeFile(index) }
+                        }
+                    }
+                }
+                
+                // History Button
+                Box {
+                    IconButton(onClick = { expandedTabIndex = -1 }) {
+                        Icon(Icons.Default.History, "历史记录", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    
+                    DropdownMenu(
+                        expanded = expandedTabIndex == -1,
+                        onDismissRequest = { expandedTabIndex = null }
+                    ) {
+                         if (viewModel.closedFilesHistory.isEmpty()) {
+                             DropdownMenuItem(
+                                text = { Text("无最近关闭记录", color = MaterialTheme.colorScheme.secondary) },
+                                onClick = { expandedTabIndex = null }
                             )
+                        } else {
                             DropdownMenuItem(
-                                text = { Text("关闭其他") },
-                                onClick = { expandedTabIndex = null; viewModel.closeOtherFiles(index) }
+                                text = { Text("清空历史", color = MaterialTheme.colorScheme.error) },
+                                onClick = { expandedTabIndex = null; viewModel.clearClosedHistory() }
                             )
-                            DropdownMenuItem(
-                                text = { Text("关闭全部") },
-                                onClick = { expandedTabIndex = null; viewModel.closeAllFiles() }
-                            )
+                            HorizontalDivider()
+                            viewModel.closedFilesHistory.forEach { tab ->
+                                DropdownMenuItem(
+                                    text = { 
+                                        Column {
+                                            Text(tab.title)
+                                            Text(tab.file.parentFile?.name ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                        }
+                                    },
+                                    onClick = { expandedTabIndex = null; viewModel.restoreClosedFile(tab) }
+                                )
+                            }
                         }
                     }
                 }
