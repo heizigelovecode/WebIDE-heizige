@@ -48,6 +48,7 @@ import com.web.webide.ui.terminal.TerminalScreen
 import kotlinx.coroutines.launch
 
 import com.web.webide.ui.welcome.WelcomeScreen
+import com.web.webide.ui.editor.doc.JsInterfaceDocScreen
 
 @Composable
 fun App(
@@ -201,6 +202,10 @@ fun App(
                     navController.popBackStack()
                 }
             )
+        }
+        
+        composable("js_interface_doc") {
+            JsInterfaceDocScreen(navController)
         }
 
         composable("about") {
