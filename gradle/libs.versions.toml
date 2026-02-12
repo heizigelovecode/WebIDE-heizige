@@ -17,7 +17,9 @@ espressoCore = "3.7.0"
 lifecycleRuntimeKtx = "2.10.0"
 activityCompose = "1.12.3"
 composeBom = "2026.01.01"
+composeIcons = "1.1.1"
 animation = "1.10.2"
+materialIconsExtended = "1.7.8"
 materialKolor = "4.1.1"
 navigationCompose = "2.9.7"
 orgEclipseJgit = "7.3.0.202506031305-r"
@@ -64,7 +66,9 @@ multiplatform-markdown-renderer-coil2 = { module = "com.mikepenz:multiplatform-m
 highlights = { module = "dev.snipme:highlights", version.ref = "highlights" }
 aboutlibraries-compose = { module = "com.mikepenz:aboutlibraries-compose", version.ref = "aboutlibrariesCompose" }
 accompanist-navigation-animation = { module = "com.google.accompanist:accompanist-navigation-animation", version.ref = "accompanistNavigationAnimation" }
-androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+compose-icons-simple = { module = "br.com.devsrsouza.compose.icons:simple-icons", version.ref = "composeIcons" }
+compose-icons-font-awesome = { module = "br.com.devsrsouza.compose.icons:font-awesome", version.ref = "composeIcons" }
+androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 #noinspection SimilarGradleDependency
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-datastore-core = { module = "androidx.datastore:datastore-core", version.ref = "datastoreCore" }
