@@ -172,6 +172,8 @@ dependencies {
     implementation(libs.coil.svg)
     implementation(project(":web-bridge"))
     implementation(libs.accompanist.navigation.animation)
+    implementation(libs.compose.icons.simple)
+    implementation(libs.compose.icons.font.awesome)
 
     implementation(libs.aboutlibraries.compose)
     implementation(libs.androidx.compose.material.icons.extended)
