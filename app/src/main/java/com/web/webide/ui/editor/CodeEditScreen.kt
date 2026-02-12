@@ -776,7 +776,7 @@ fun EditCode(
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("未打开任何文件")
-                    if (viewModel.closedFilesHistory.isNotEmpty()) {
+                    if (viewModel.editorConfig.showHistory && viewModel.closedFilesHistory.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
                         Box {
                             TextButton(onClick = { expandedTabIndex = -2 }) {
@@ -880,36 +880,38 @@ fun EditCode(
                 }
                 
                 // History Button
-                Box {
-                    IconButton(onClick = { expandedTabIndex = -1 }) {
-                        Icon(Icons.Default.History, "历史记录", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    
-                    DropdownMenu(
-                        expanded = expandedTabIndex == -1,
-                        onDismissRequest = { expandedTabIndex = null }
-                    ) {
-                         if (viewModel.closedFilesHistory.isEmpty()) {
-                             DropdownMenuItem(
-                                text = { Text("无最近关闭记录", color = MaterialTheme.colorScheme.secondary) },
-                                onClick = { expandedTabIndex = null }
-                            )
-                        } else {
-                            DropdownMenuItem(
-                                text = { Text("清空历史", color = MaterialTheme.colorScheme.error) },
-                                onClick = { expandedTabIndex = null; viewModel.clearClosedHistory() }
-                            )
-                            HorizontalDivider()
-                            viewModel.closedFilesHistory.forEach { tab ->
-                                DropdownMenuItem(
-                                    text = { 
-                                        Column {
-                                            Text(tab.title)
-                                            Text(tab.file.parentFile?.name ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                                        }
-                                    },
-                                    onClick = { expandedTabIndex = null; viewModel.restoreClosedFile(tab) }
+                if (viewModel.editorConfig.showHistory) {
+                    Box {
+                        IconButton(onClick = { expandedTabIndex = -1 }) {
+                            Icon(Icons.Default.History, "历史记录", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        
+                        DropdownMenu(
+                            expanded = expandedTabIndex == -1,
+                            onDismissRequest = { expandedTabIndex = null }
+                        ) {
+                             if (viewModel.closedFilesHistory.isEmpty()) {
+                                 DropdownMenuItem(
+                                    text = { Text("无最近关闭记录", color = MaterialTheme.colorScheme.secondary) },
+                                    onClick = { expandedTabIndex = null }
                                 )
+                            } else {
+                                DropdownMenuItem(
+                                    text = { Text("清空历史", color = MaterialTheme.colorScheme.error) },
+                                    onClick = { expandedTabIndex = null; viewModel.clearClosedHistory() }
+                                )
+                                HorizontalDivider()
+                                viewModel.closedFilesHistory.forEach { tab ->
+                                    DropdownMenuItem(
+                                        text = { 
+                                            Column {
+                                                Text(tab.title)
+                                                Text(tab.file.parentFile?.name ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                            }
+                                        },
+                                        onClick = { expandedTabIndex = null; viewModel.restoreClosedFile(tab) }
+                                    )
+                                }
                             }
                         }
                     }
