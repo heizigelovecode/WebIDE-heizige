@@ -36,6 +36,7 @@ import com.web.webide.core.utils.LogCatcher
 import com.web.webide.core.utils.PermissionManager
 import com.web.webide.ui.editor.EditorColorSchemeManager
 import com.web.webide.ui.editor.git.GitManager
+import io.github.rosemoe.sora.lang.Language
 import io.github.rosemoe.sora.lang.EmptyLanguage
 import io.github.rosemoe.sora.lang.styling.TextStyle
 import io.github.rosemoe.sora.text.Content
@@ -471,6 +472,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 "glsl", "vert", "frag" -> "source.c"
                 "c", "h" -> "source.c"
                 "cpp", "hpp", "cc" -> "source.cpp"
+                "php" -> "text.html.php"
                 else -> return null
             }
             val prefs = context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE)
@@ -813,11 +815,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         } catch (_: Exception) {}
     }
 
-    private fun setupLspForEditor(context: Context, state: CodeEditorState, editor: CodeEditor, textMateLanguage: TextMateLanguage?) {
+    private fun setupLspForEditor(context: Context, state: CodeEditorState, editor: CodeEditor, language: Language?) {
         val fileExtension = state.file.extension.lowercase()
-        if (fileExtension !in listOf("html", "htm", "css", "js", "javascript")) return
+        if (fileExtension !in listOf("html", "htm", "css", "js", "javascript", "php", "c", "h", "cpp", "hpp", "glsl", "vert", "frag", "json")) return
         val prefs = context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE)
-        if (!prefs.getBoolean("editor_lsp_enabled", false) || textMateLanguage == null) return
+        if (!prefs.getBoolean("editor_lsp_enabled", false) || language == null) return
 
         try {
             if (lspProject == null) {
@@ -836,13 +838,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     "html", "htm" -> CustomLanguageServerDefinition(ext = "html", serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("vscode-html-language-server", "--stdio")) })
                     "css" -> CustomLanguageServerDefinition(ext = "css", serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("vscode-css-language-server", "--stdio")) })
                     "js", "javascript" -> CustomLanguageServerDefinition(ext = "js", serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("typescript-language-server", "--stdio")) })
+                    "php" -> CustomLanguageServerDefinition(ext = "php", serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("intelephense", "--stdio")) })
+                    "c", "h", "cpp", "hpp" -> CustomLanguageServerDefinition(ext = fileExtension, serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("clangd")) })
+                    "glsl", "vert", "frag" -> CustomLanguageServerDefinition(ext = fileExtension, serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("glsl-language-server", "--stdio")) })
+                    "json" -> CustomLanguageServerDefinition(ext = "json", serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("vscode-json-language-server", "--stdio")) })
                     else -> null
                 }
                 if (def != null) { project.addServerDefinition(def); addedLspDefinitions.add(fileExtension) }
             }
 
             val lspEditor = project.getOrCreateEditor(realFile.absolutePath)
-            lspEditor.wrapperLanguage = textMateLanguage
+            lspEditor.wrapperLanguage = language
             lspEditor.editor = editor
             state.lspEditor = lspEditor
             
