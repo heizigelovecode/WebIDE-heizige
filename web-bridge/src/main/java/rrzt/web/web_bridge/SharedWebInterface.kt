@@ -75,7 +75,7 @@ open class SharedWebInterface(
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private var sensorListener: SensorEventListener? = null
 
-    protected fun sendResultToJs(callbackId: String, success: Boolean, data: String) {
+    fun sendResultToJs(callbackId: String, success: Boolean, data: String) {
         val jsonStr = JSONObject().put("success", success).put("data", data).toString()
         val base64 = Base64.encodeToString(jsonStr.toByteArray(StandardCharsets.UTF_8), Base64.NO_WRAP)
         mainHandler.post {
