@@ -341,3 +341,68 @@ let timeStr = window.Android.formatDate(Date.now(), "yyyy-MM-dd HH:mm:ss");
 *   **JSON 传输**: 像 `startActivity` 和 `httpRequest` 这样接收对象的接口，必须在 JS 端先用 `JSON.stringify()` 转换为字符串。
 *   **Context 要求**: 涉及 UI 操作（Dialog/Toast/Permission）的方法通常需要原生侧传入的是 `Activity` 类型的 Context，否则可能会失效。
 *   **权限声明**: 即使调用了 `requestPermission`，您的 AndroidManifest.xml 中仍需预先声明对应的权限。
+
+---
+
+### 十一、 蓝牙功能 (Beta)
+*注意：需在 AndroidManifest.xml 声明蓝牙相关权限，并动态申请权限。*
+
+**btIsAvailable()**: 检查设备是否支持蓝牙。
+```javascript
+if(window.Android.btIsAvailable()) { ... }
+```
+
+**btIsEnabled()**: 检查蓝牙是否已开启。
+```javascript
+if(window.Android.btIsEnabled()) { ... }
+```
+
+**btEnable()**: 请求开启蓝牙。
+```javascript
+window.Android.btEnable();
+```
+
+**btStartScan(callbackId)**: 开始扫描 BLE 设备。
+```javascript
+window.Android.btStartScan("scan_callback");
+// 回调数据: {name: "Device", address: "00:11...", rssi: -50}
+```
+
+**btStopScan()**: 停止扫描。
+```javascript
+window.Android.btStopScan();
+```
+
+**btConnect(address, callbackId)**: 连接设备。
+```javascript
+window.Android.btConnect("00:11:22:33:44:55", "conn_callback");
+// 回调数据: {status: "connected"|"disconnected", address: "..."}
+```
+
+**btDisconnect(address, callbackId)**: 断开连接。
+```javascript
+window.Android.btDisconnect("00:11:22:33:44:55", "dis_callback");
+```
+
+**btGetServices(address, callbackId)**: 获取服务列表。
+```javascript
+window.Android.btGetServices("00:11:22:33:44:55", "svc_callback");
+// 回调返回 JSON 数组
+```
+
+**btRead(address, serviceUuid, charUuid, callbackId)**: 读取特征值。
+```javascript
+window.Android.btRead("00:11...", "00001800...", "00002a00...", "read_cb");
+// 回调数据: Base64 字符串
+```
+
+**btWrite(address, serviceUuid, charUuid, dataBase64, callbackId)**: 写入特征值。
+```javascript
+window.Android.btWrite("00:11...", "00001800...", "00002a00...", "SGVsbG8=", "write_cb");
+```
+
+**btNotify(address, serviceUuid, charUuid, enable, callbackId)**: 开启/关闭通知。
+```javascript
+window.Android.btNotify("00:11...", "00001800...", "00002a00...", true, "notify_cb");
+// 回调数据: {uuid: "...", data: "Base64..."}
+```
