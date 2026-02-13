@@ -472,7 +472,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 "glsl", "vert", "frag" -> "source.c"
                 "c", "h" -> "source.c"
                 "cpp", "hpp", "cc" -> "source.cpp"
-                "php" -> "text.html.php"
+                "php" -> "source.php"
                 else -> return null
             }
             val prefs = context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE)
