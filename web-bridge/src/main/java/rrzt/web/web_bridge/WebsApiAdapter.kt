@@ -764,6 +764,49 @@ class WebsApiAdapter(
     @JavascriptInterface
     fun openSettings() = sharedInterface.openAppSettings()
 
+    // ==========================================
+    // 七、蓝牙相关
+    // ==========================================
+
+    private val bluetoothManager by lazy {
+        BluetoothManager(context) { id, success, data ->
+            sharedInterface.sendResultToJs(id, success, data)
+        }
+    }
+
+    @JavascriptInterface
+    fun btIsAvailable(): Boolean = bluetoothManager.isAvailable()
+
+    @JavascriptInterface
+    fun btIsEnabled(): Boolean = bluetoothManager.isEnabled()
+
+    @JavascriptInterface
+    fun btEnable(): Boolean = bluetoothManager.enable()
+
+    @JavascriptInterface
+    fun btStartScan(callbackId: String) = bluetoothManager.startScan(callbackId)
+
+    @JavascriptInterface
+    fun btStopScan() = bluetoothManager.stopScan()
+
+    @JavascriptInterface
+    fun btConnect(address: String, callbackId: String) = bluetoothManager.connect(address, callbackId)
+
+    @JavascriptInterface
+    fun btDisconnect(address: String, callbackId: String) = bluetoothManager.disconnect(address, callbackId)
+
+    @JavascriptInterface
+    fun btGetServices(address: String, callbackId: String) = bluetoothManager.getServices(address, callbackId)
+
+    @JavascriptInterface
+    fun btRead(address: String, serviceUuid: String, charUuid: String, callbackId: String) = bluetoothManager.read(address, serviceUuid, charUuid, callbackId)
+
+    @JavascriptInterface
+    fun btWrite(address: String, serviceUuid: String, charUuid: String, dataBase64: String, callbackId: String) = bluetoothManager.write(address, serviceUuid, charUuid, dataBase64, callbackId)
+
+    @JavascriptInterface
+    fun btNotify(address: String, serviceUuid: String, charUuid: String, enable: Boolean, callbackId: String) = bluetoothManager.notify(address, serviceUuid, charUuid, enable, callbackId)
+
     // 辅助方法：获取 Uri
     private fun getUriForFile(file: File): Uri {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
