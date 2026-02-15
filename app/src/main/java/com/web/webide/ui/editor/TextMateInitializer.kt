@@ -6,6 +6,7 @@ import io.github.rosemoe.sora.langs.textmate.registry.GrammarRegistry
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry
 import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel
 import io.github.rosemoe.sora.langs.textmate.registry.provider.AssetsFileResolver
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -24,6 +25,7 @@ object TextMateInitializer {
 
     fun isReady() = isInitialized
 
+    @OptIn(DelicateCoroutinesApi::class)
     fun initialize(context: Context, onComplete: (() -> Unit)? = null) {
         if (isInitialized) {
             onComplete?.invoke()
@@ -85,6 +87,7 @@ object TextMateInitializer {
         }
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     private fun notifyCallbacks() {
         synchronized(callbacks) {
             val iter = callbacks.iterator()
