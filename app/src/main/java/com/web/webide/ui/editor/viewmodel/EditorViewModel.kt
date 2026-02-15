@@ -473,6 +473,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 "c", "h" -> "source.c"
                 "cpp", "hpp", "cc" -> "source.cpp"
                 "php" -> "source.php"
+                "ts", "typescript" -> "source.ts"
+                "tsx" -> "source.tsx"
                 else -> return null
             }
             val prefs = context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE)
@@ -526,20 +528,40 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    suspend fun saveAllModifiedFiles(snackbarHostState: SnackbarHostState) {
-        withContext(Dispatchers.IO) {
+    suspend fun saveAllModifiedFiles(snackbarHostState: SnackbarHostState): Boolean {
+        return withContext(Dispatchers.IO) {
             val modifiedFiles = openFiles.filterIsInstance<CodeEditorState>().filter { it.isModified }
-            if (modifiedFiles.isEmpty()) return@withContext
+            if (modifiedFiles.isEmpty()) return@withContext true
+
+            var successCount = 0
+            var failCount = 0
+            var lastError: String? = null
 
             modifiedFiles.forEach { state ->
                 try {
                     state.file.writeText(state.content)
                     state.onContentSaved()
-                } catch (e: Exception) { e.printStackTrace() }
+                    successCount++
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    failCount++
+                    lastError = e.message
+                }
             }
+
+            val message = if (failCount == 0) {
+                "已保存 $successCount 个文件"
+            } else {
+                "保存完成: $successCount 成功, $failCount 失败\n最后错误: $lastError"
+            }
+
             withContext(Dispatchers.Main) {
-                viewModelScope.launch { snackbarHostState.showSnackbar("已保存 ${modifiedFiles.size} 个文件") }
+                viewModelScope.launch { 
+                    snackbarHostState.showSnackbar(message)
+                }
             }
+            
+            failCount == 0
         }
     }
 
@@ -817,7 +839,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun setupLspForEditor(context: Context, state: CodeEditorState, editor: CodeEditor, language: Language?) {
         val fileExtension = state.file.extension.lowercase()
-        if (fileExtension !in listOf("html", "htm", "css", "js", "javascript", "php", "c", "h", "cpp", "hpp", "glsl", "vert", "frag", "json")) return
+        if (fileExtension !in listOf("html", "htm", "css", "js", "javascript", "php", "c", "h", "cpp", "hpp", "glsl", "vert", "frag", "json", "ts", "typescript", "tsx")) return
         val prefs = context.getSharedPreferences("WebIDE_Editor_Settings", Context.MODE_PRIVATE)
         if (!prefs.getBoolean("editor_lsp_enabled", false) || language == null) return
 
@@ -837,7 +859,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val def = when(fileExtension) {
                     "html", "htm" -> CustomLanguageServerDefinition(ext = "html", serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("vscode-html-language-server", "--stdio")) })
                     "css" -> CustomLanguageServerDefinition(ext = "css", serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("vscode-css-language-server", "--stdio")) })
-                    "js", "javascript" -> CustomLanguageServerDefinition(ext = "js", serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("typescript-language-server", "--stdio")) })
+                    "js", "javascript", "ts", "typescript", "tsx" -> CustomLanguageServerDefinition(ext = "js", serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("typescript-language-server", "--stdio")) })
                     "php" -> CustomLanguageServerDefinition(ext = "php", serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("intelephense", "--stdio")) })
                     "c", "h", "cpp", "hpp" -> CustomLanguageServerDefinition(ext = fileExtension, serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("clangd")) })
                     "glsl", "vert", "frag" -> CustomLanguageServerDefinition(ext = fileExtension, serverConnectProvider = { ProotStreamConnectionProvider(context, listOf("glsl-language-server", "--stdio")) })
