@@ -48,6 +48,12 @@ document.getElementById('btn').onclick = function() {
 };
     """.trimIndent()
 
+    val normalIndexPhp = """
+<?php
+echo "Hello from PHP!";
+?>
+    """.trimIndent()
+
     val apiJs = """
 (function() {
     const isAndroid = !!(window.Android && window.Android.httpRequest);
